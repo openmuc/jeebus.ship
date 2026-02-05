@@ -20,7 +20,7 @@ import io.netty.handler.ssl.SslHandler;
 import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.MessageUtility;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
@@ -148,7 +148,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     }
 
     public int getTrustLevel() {
-        int trustLevel = Configuration.getTrustLevel(node.consumeAutoAccept());
+        int trustLevel = StaticConfiguration.getTrustLevel(node.consumeAutoAccept());
         String peerSki = getPeerSki();
         if (KeyManagement.getTrustedSkis().containsKey(peerSki)) {
             trustLevel = KeyManagement.getTrustedSkis().get(peerSki).getTrustLevel();

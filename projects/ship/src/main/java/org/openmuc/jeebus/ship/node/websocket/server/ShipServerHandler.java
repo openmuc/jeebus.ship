@@ -33,8 +33,8 @@ public class ShipServerHandler extends WebSocketHandler implements
 
     private final ShipServer server;
 
-    public ShipServerHandler(ShipNodeContext nodeCtx, ShipServer server) {
-        super(nodeCtx, server.getSocketCB());
+    public ShipServerHandler(ShipNodeContext nodeContext, ShipServer server) {
+        super(nodeContext, server.getSocketListener());
         this.server = server;
     }
 

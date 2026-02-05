@@ -74,13 +74,6 @@
         </encoder>
     </appender>
 
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/${byMinute}_${sun.java.command}.log</file>
-        <encoder>
-            <pattern>${patternPrefix} %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <root level="all">
         <appender-ref ref="STDOUT_TRACE"/>
         <appender-ref ref="STDOUT_DEBUG"/>
@@ -94,10 +87,9 @@
     <logger name="javax.jmdns" level="INFO"/>
     <logger name="io.netty" level="INFO"/>
     <logger name="org.openmuc.jeebus" level="INFO"/>
-
-    <root level="DEBUG">
-        <appender-ref ref="STDOUT"/>
-    </root>
-
     <logger name="org.openmuc.jeebus.ship" level="DEBUG"/>
+
+    <!-- For SHIP messages -->
+    <logger name="org.openmuc.jeebus.ship.shipconnection" level="INFO"/>
+
 </configuration>

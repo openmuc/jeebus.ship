@@ -32,18 +32,18 @@ public class ShipClientHandler extends WebSocketHandler implements
     AuthenticatedConnection {
 
     private final WebSocketClientHandshaker handshaker;
-    private final StopClientCallBack stopCB;
+    private final StopClientListener stopListener;
     private ChannelPromise handshakeFuture;
 
     public ShipClientHandler(
         WebSocketClientHandshaker handshaker,
         ShipNodeContext nodeCtx,
         ShipNodeImpl shipNode,
-        StopClientCallBack stopCB
+        StopClientListener stopListener
     ) {
         super(nodeCtx, shipNode);
         this.handshaker = handshaker;
-        this.stopCB = stopCB;
+        this.stopListener = stopListener;
     }
 
     public ChannelFuture handshakeFuture() {
@@ -121,7 +121,7 @@ public class ShipClientHandler extends WebSocketHandler implements
                                 connection.getApiShipConn()
                             );
                     }
-                    stopCB.stop();
+                    stopListener.stop();
                 }
                 else {
                     messageBuffer.writeBytes(bytes);
@@ -140,12 +140,14 @@ public class ShipClientHandler extends WebSocketHandler implements
 
     @Override
     public void close() {
-        connection.stopStateTimeouts();
+        if(connection != null) {
+            connection.stopStateTimeouts();
+        }
         if (channel.isActive()) {
             channel.writeAndFlush(new CloseWebSocketFrame());
         }
         channel.close().awaitUninterruptibly();
-        stopCB.stop();
+        stopListener.stop();
     }
 
     public ShipConnectionImpl getConnection() {

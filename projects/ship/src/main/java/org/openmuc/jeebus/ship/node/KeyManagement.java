@@ -293,7 +293,7 @@ public class KeyManagement {
      * @param keyPair
      *     passphrase for the key pair to be generated
      * @param distinguishedName
-     *     the X.509 Distinguished Name, eg "CN=TEst, L=London, C=GB". For IoT
+     *     the X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT
      *     devices, usually the DeviceID
      * @param days
      *     how many days the Certificate is valid for

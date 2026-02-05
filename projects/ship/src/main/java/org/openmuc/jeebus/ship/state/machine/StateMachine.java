@@ -10,7 +10,7 @@
 
 package org.openmuc.jeebus.ship.state.machine;
 
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.view.UserInterface;
@@ -55,7 +55,7 @@ public class StateMachine implements StateHandlerContext {
     private final boolean isServer;
     protected final ShipConnection shipConnection;
     private final UserInterface userInterface;
-    private final Configuration config;
+    private final StaticConfiguration config;
     private byte[] pendingMessage;
 
     protected ScheduledExecutorService timeoutExecutor
@@ -79,7 +79,7 @@ public class StateMachine implements StateHandlerContext {
     public StateMachine(
         ShipConnection shipConnection,
         UserInterface userInterface,
-        Configuration config,
+        StaticConfiguration config,
         State initial,
         Object extraData
     ) {
@@ -96,7 +96,7 @@ public class StateMachine implements StateHandlerContext {
     public StateMachine(
         ShipConnection shipConnection,
         UserInterface userInterface,
-        Configuration config
+        StaticConfiguration config
     ) {
         this(shipConnection, userInterface, config, null, null);
     }
@@ -221,7 +221,7 @@ public class StateMachine implements StateHandlerContext {
         shipConnection.closeImmediately();
     }
 
-    public Configuration getConfig() {
+    public StaticConfiguration getConfig() {
         return config;
     }
 

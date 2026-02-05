@@ -33,5 +33,4 @@ public interface ShipInterface {
      */
     @Deprecated(since = "2.3.0")
     void setConnHandler(ConnectionHandler connHandler);
-
 }

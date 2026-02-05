@@ -11,13 +11,11 @@
 package org.openmuc.jeebus.ship.node;
 
 import io.netty.handler.ssl.SslContext;
-import org.openmuc.jeebus.ship.api.ClientConnectedCallBack;
+import org.openmuc.jeebus.ship.api.ClientConnectedListener;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
-import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
-import org.openmuc.jeebus.ship.node.service.TxtRecord;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
@@ -27,13 +25,14 @@ import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.jmdns.ServiceInfo;
 import javax.net.ssl.SSLException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,7 +42,6 @@ import static org.openmuc.jeebus.ship.node.KeyManagement.encodeSkiAsString;
 public class ShipNodeImpl {
 
     protected static final Logger log = LoggerFactory.getLogger(ShipNodeImpl.class);
-    private final String ownShipId;
 
     private final List<ShipServer> servers
         = Collections.synchronizedList(new ArrayList<>());
@@ -51,7 +49,9 @@ public class ShipNodeImpl {
     private final List<ShipClient> clients
         = Collections.synchronizedList(new ArrayList<>());
 
-    private KeyManagement keyManagement;
+    private final ShipConfig nodeConfig;
+
+    private final KeyManagement keyManagement;
 
     private boolean autoAccept;
 
@@ -59,17 +59,13 @@ public class ShipNodeImpl {
 
     private final SslContextFactory sslContextFactory;
 
-    private final Configuration config;
+    private final StaticConfiguration staticConfig;
 
-    private final TxtRecord ownTxt;
-
-    private final ServiceInfo ownService;
-
-    private ServiceRegistry serviceRegistry;
+    private final ServiceRegistry serviceRegistry;
 
     private final ConnectionHandler connHandler;
 
-    private ClientConnectedCallBack clientConnectedListener;
+    private ClientConnectedListener clientConnectedListener;
 
     /**
      * sets up a SHIP node
@@ -80,24 +76,19 @@ public class ShipNodeImpl {
      *     connection handler to handle all interactions with SHIP peer
      */
     public ShipNodeImpl(
-        ShipNodeConfiguration nodeConfig,
+        ShipConfig nodeConfig,
         ConnectionHandler connHandler
     ) {
-
-        String serviceId = nodeConfig.getServiceId();
-        if (serviceId.getBytes().length > 63) {
-            throw new IllegalArgumentException(
-                "service id should not be longer than 63 bytes");
-        }
-
-        ownShipId = nodeConfig.getServiceId();
+        this.nodeConfig = nodeConfig;
 
         try {
             this.keyManagement = new KeyManagement(
-                nodeConfig.getCertificateStorage(),
-                nodeConfig.getDistinguishedName(),
-                nodeConfig.getServiceId(),
-                nodeConfig.getCertificateValidityInDays()
+                nodeConfig.getKeyStorePath(),
+                nodeConfig.getCertificateAlias(),
+                nodeConfig.getKeyStorePassphrase(),
+                nodeConfig.getKeyPairPassphrase(),
+                nodeConfig.getCertificateDistinguishedName(),
+                nodeConfig.getCertificateValidity()
             );
             log.info(
                 "Key Management initialized. SKI of this node is {}",
@@ -117,65 +108,35 @@ public class ShipNodeImpl {
         // server initiated renegotiation is not supported by netty as of version 4.1
         System.setProperty("jdk.tls.rejectClientInitiatedRenegotiation", "true");
 
-        config = new Configuration();
+        staticConfig = new StaticConfiguration();
 
         sslContextFactory = new SslContextFactory();
 
-        String wssPath = nodeConfig.getWssPath();
-        String path;
-        if (wssPath == null || wssPath.isEmpty()) {
-            path = "/";
-        }
-        else if (!wssPath.startsWith("/")) {
-            path = "/" + wssPath;
-        }
-        else {
-            path = wssPath;
-        }
-
-        int port = nodeConfig.getPort();
-
-        if (!nodeConfig.isClientOnly()) {
-            createServer(port, path, nodeConfig.isKeepAlive());
-        }
-
-        String serviceDomain = nodeConfig.getServiceDomain().endsWith(".")
-            ? nodeConfig.getServiceDomain()
-            : nodeConfig.getServiceDomain() + ".";
-
-        String serviceType = "_ship._tcp." + serviceDomain;
-        String mdnsName = String.join(".", serviceId, serviceDomain);
+        // Even if we do not start a server to announce via mDNS,
+        // we might still want to listen in.
         serviceRegistry = new ServiceRegistry(
-            nodeConfig.getIpAddresses(),
-            mdnsName,
-            serviceType,
+            nodeConfig,
             connHandler
         );
 
-        String ski = encodeSkiAsString(keyManagement.getOwnSki());
-        ownTxt = new TxtRecord(
-            serviceId,
-            wssPath,
-            ski,
-            false,
-            "Fraunhofer ISE",
-            "jEEBus",
-            "jEEBus"
-        );
+        if (nodeConfig.getServerEnabled()) {
+            ShipServer server = createServer(
+                nodeConfig.getServerBindAddresses(),
+                nodeConfig.getWssPath(),
+                nodeConfig.isKeepAlive()
+            );
 
-        ownService = ServiceRegistry.createServiceInfo(
-            serviceType,
-            nodeConfig.getServiceInstance(),
-            port,
-            ownTxt
-        );
+            if (nodeConfig.getAutoAcceptEnabled()) {
+                enableAutoAcceptMode();
+            }
 
-        try {
-            serviceRegistry.registerService(ownService);
+            serviceRegistry.initiateServices(
+                getOwnSki(),
+                server.getBoundSocketAddresses()
+            );
+
         }
-        catch (IOException e) {
-            log.error("Exception while registering service: {}", e.getMessage());
-        }
+
     }
 
     public void closeDoubleConns(WebSocketHandler current) {
@@ -226,8 +187,13 @@ public class ShipNodeImpl {
 
     public ShipClient createClient(URI serverUri) {
         try {
-            SslContext clientCtx = sslContextFactory.generateClientSslContext(keyManagement.getCert());
-            ShipNodeContext nodeCtx = new ShipNodeContext(config, ownShipId);
+            SslContext clientCtx = sslContextFactory.generateClientSslContext(
+                keyManagement.getCert()
+            );
+            ShipNodeContext nodeCtx = new ShipNodeContext(
+                staticConfig,
+                nodeConfig.getId()
+            );
             nodeCtx.setConnHandler(connHandler);
             ShipClient client = new ShipClient(
                 clientCtx,
@@ -248,14 +214,23 @@ public class ShipNodeImpl {
         return null;
     }
 
-    public ShipServer createServer(int port, String wssPath, boolean keepAlive) {
+    public ShipServer createServer(
+        Set<InetSocketAddress> bindAddresses,
+        String wssPath,
+        boolean keepAlive
+    ) {
         try {
-            SslContext sslCtx = sslContextFactory.generateServerSslContext(keyManagement.getCert());
-            ShipNodeContext nodeCtx = new ShipNodeContext(config, ownShipId);
+            SslContext sslCtx = sslContextFactory.generateServerSslContext(
+                keyManagement.getCert()
+            );
+            ShipNodeContext nodeCtx = new ShipNodeContext(
+                staticConfig,
+                nodeConfig.getId()
+            );
             nodeCtx.setConnHandler(connHandler);
             ShipServer server = new ShipServer(
                 sslCtx,
-                port,
+                bindAddresses,
                 wssPath,
                 nodeCtx,
                 this,
@@ -275,17 +250,15 @@ public class ShipNodeImpl {
     }
 
     /**
-     * activates auto accept mode
+     * enables the auto accept mode
      */
-    public synchronized void autoAcceptMode() {
-        boolean registerFlag = Boolean.parseBoolean(ownService.getPropertyString(
-            "register"));
-        if (!registerFlag) {
-            setRegisterFlagInTxt(true);
-        }
+    public synchronized void enableAutoAcceptMode() {
         if (autoAcceptTimeout == null) {
-            int autoAcceptWindow = getConfig().getAutoAcceptWindow();
-            log.info("SHIP node starting auto accept mode, it will last for {} seconds",
+            serviceRegistry.toggleRegisterFlag();
+
+            int autoAcceptWindow = getStaticConfig().getAutoAcceptWindow();
+            log.info(
+                "SHIP node starting auto accept mode, it will last for {} seconds",
                 autoAcceptWindow
             );
             autoAccept = true;
@@ -302,17 +275,6 @@ public class ShipNodeImpl {
         }
     }
 
-    private synchronized void setRegisterFlagInTxt(boolean registerFlag) {
-        ownTxt.setRegister(registerFlag);
-        ownService.setText(ownTxt.getTxtRecordProps());
-        try {
-            serviceRegistry.changeService(ownService, ownService);
-        }
-        catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
     /**
      * synchronized method to check if auto accept mode is running. Cancels the
      * timeout if it is and sets auto accept to false.
@@ -325,7 +287,7 @@ public class ShipNodeImpl {
             autoAccept = false;
             autoAcceptTimeout.cancel(true);
             autoAcceptTimeout = null;
-            setRegisterFlagInTxt(false);
+            serviceRegistry.toggleRegisterFlag();
             return true;
         }
         return false;
@@ -345,10 +307,6 @@ public class ShipNodeImpl {
 
     public ServiceRegistry getServiceRegistry() {
         return serviceRegistry;
-    }
-
-    public void setServiceRegistry(ServiceRegistry serviceRegistry) {
-        this.serviceRegistry = serviceRegistry;
     }
 
     public List<ShipServer> getServers() {
@@ -381,12 +339,8 @@ public class ShipNodeImpl {
         return keyManagement;
     }
 
-    public void setKeyManagement(KeyManagement keyManagement) {
-        this.keyManagement = keyManagement;
-    }
-
-    public Configuration getConfig() {
-        return this.config;
+    public StaticConfiguration getStaticConfig() {
+        return this.staticConfig;
     }
 
     public ConnectionHandler getConnHandler() {
@@ -404,16 +358,12 @@ public class ShipNodeImpl {
 
     }
 
-    public ClientConnectedCallBack getClientConnectedListener() {
+    public ClientConnectedListener getClientConnectedListener() {
         return clientConnectedListener;
     }
 
-    public void setClientConnectedListener(ClientConnectedCallBack listener) {
+    public void setClientConnectedListener(ClientConnectedListener listener) {
         this.clientConnectedListener = listener;
-    }
-
-    public boolean isAutoAccept() {
-        return autoAccept;
     }
 
     public void removeClient(ShipClient client) {

@@ -12,8 +12,8 @@ package org.openmuc.jeebus.ship.examples;
 
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.Ship;
+import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
-import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -21,16 +21,6 @@ import java.nio.charset.StandardCharsets;
 public class ExampleClient {
 
     public static void main(String[] args) throws IOException {
-        char[] passphrase = "yourpassphrase".toCharArray();
-
-        // replaceable with any free port
-        int port = 2003;
-
-        // replaceable with any String starting with '/'
-        String wssPath = "/ship";
-
-        String serviceDomain = "local.";
-
         /*
          implement your own ConnHandler, if used purely as client, connHandler
          can be left null
@@ -38,19 +28,13 @@ public class ExampleClient {
         ConnectionHandler connHandler = null;
 
         // serviceId and serviceInstance should be unique in the network
-        ShipNodeConfiguration conf = new ShipNodeConfiguration(
-            port,
-            wssPath,
-            false,
-            "EXAMPLEBRAND-EEB01M4EU-001122334456",
-            serviceDomain,
-            "Dishwasher ExampleCompany EEB01M4EU",
-            "exampleAlias",
-            passphrase,
-            passphrase,
-            "CN=example name2",
-            3650
-        );
+        ShipConfig conf = ShipConfig.getBuilder()
+            .withServerBindAddresses("localhost:2003")
+            .withId("EXAMPLEBRAND-EEB01M4EU-001122334456")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU")
+            .withCertificateDistinguishedName("CN=example name2")
+            .build();
+
         Ship ship = new Ship(conf, connHandler);
 
         /*
@@ -79,7 +63,7 @@ public class ExampleClient {
         shipConnInterface.sendMsg(exampleMsg);
 
         // connection can be closed with
-        ship.shutDown();
+        ship.close();
     }
 
 }

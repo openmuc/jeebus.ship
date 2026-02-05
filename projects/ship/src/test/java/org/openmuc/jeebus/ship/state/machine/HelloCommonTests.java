@@ -14,7 +14,7 @@ import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.smehello.ConnectionHelloPhaseType;
 import org.openmuc.jeebus.ship.message.smehello.ConnectionHelloType;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.util.InstrumentedStateMachine;
 import org.openmuc.jeebus.ship.util.StateMachineAssertions;
 import org.openmuc.jeebus.ship.util.ThrowingUserInterface;
@@ -30,7 +30,7 @@ import static org.openmuc.jeebus.ship.state.machine.SpecifiedTimeout.SME_WAIT_FO
  * Common test code shared between {@link HelloPendingStateTest} and {@link HelloReadyStateTest}.
  */
 public class HelloCommonTests {
-    public static final int DEFAULT_WAIT_FOR_READY = new Configuration().getT_hello_init();
+    public static final int DEFAULT_WAIT_FOR_READY = new StaticConfiguration().getT_hello_init();
     // why does the SHIP spec have two constants with different names that are
     // defined to have the same value? it is a mystery
     public static final int WAIT_FOR_READY_INCREMENT = DEFAULT_WAIT_FOR_READY;

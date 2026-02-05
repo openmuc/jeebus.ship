@@ -35,8 +35,8 @@ public class SslContextFactory {
     private TrustManager[] trustManagers;
 
     public SslContextFactory() {
-        this.PROTOCOLS = Configuration.getProtocols();
-        this.CIPHERS = Configuration.getCiphers();
+        this.PROTOCOLS = StaticConfiguration.getProtocols();
+        this.CIPHERS = StaticConfiguration.getCiphers();
     }
 
     public SslContext generateServerSslContext(CertificateInfo cert) throws

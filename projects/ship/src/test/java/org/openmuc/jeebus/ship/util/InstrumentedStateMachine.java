@@ -11,7 +11,7 @@
 package org.openmuc.jeebus.ship.util;
 
 import org.jmock.lib.concurrent.DeterministicScheduler;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
@@ -37,14 +37,14 @@ public class InstrumentedStateMachine extends StateMachine {
     private Set<State> stoppingSet = Set.of();
     private boolean peerSkiAuthenticated = false;
 
-    public InstrumentedStateMachine(boolean isServer, Configuration config, State initial) {
+    public InstrumentedStateMachine(boolean isServer, StaticConfiguration config, State initial) {
         super(new FakeShipConnection(isServer), new DelegatingUserInterface(new ThrowingUserInterface<>()), config);
         if (initial != null) become(initial);
         setTimeoutExecutor(new DeterministicScheduler());
     }
 
     public InstrumentedStateMachine(boolean isServer, State initial) {
-        this(isServer, new Configuration(), initial);
+        this(isServer, new StaticConfiguration(), initial);
     }
 
     public InstrumentedStateMachine(boolean isServer) {

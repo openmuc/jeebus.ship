@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0] - 
+
+### Changed
+
+- Overhaul API
+   - introduce fluent builders
+   - introduce reasonable default configuration
+
+### Added
+
+- Fully support brand, type and serial mDNS TXT-Record flags
+
+### Removed
+
+- discontinued the `ship-cli` subproject
+
 ## [2.3.0] - 2026-07-09
 
 ### Changed
@@ -45,6 +61,8 @@ _First Open-Source Release under the EPL-2.0_
 - Update dependencies to fix vulnerabilities
   - Drop guava dependency
 - Transmit the SHIP-ID in the `AccessMethodsIdentification`
+- Fix a bug where configured IP-Addresses were ignored causing the SHIP-Server being
+  bound to all available addresses
 
 ## [2.1.1] - 2024-08-06
 
@@ -52,7 +70,7 @@ _First Open-Source Release under the AGPL_
 
 ### Fixed
 
-- Fix  handling of messages split into multiple WebSocketFrames
+- Fix  handling of messages split into multiple `WebSocketFrames`
 - Update dependencies to fix vulnerabilities
 
 ## [2.1.0] - 2024-04-11
@@ -93,17 +111,16 @@ _First Open-Source Release under the AGPL_
 
 ### Fixed
 
-- WebSocketHandler now notifies ConnectionHandler properly when closing a double
-  connection
-- KeyManagement:
-    - existing key store can be loaded
-    - fix generating, storing and loading of keystore
-    - fix asn1 encoding now using octet string instead of sequence
-    - add SubjectKeyIdentifier to self-signed certificate
-- SME_PROT_H state: fix faulty parsing of messages in this state and add parsing for
-  messageProtocolHandshakeError
-  messages
-- replace polling for timers with ScheduledExecutors
+- `WebSocketHandler` now notifies `ConnectionHandler` properly when 
+  closing a double connection
+- `KeyManagement`:
+  - existing key store can be loaded
+  - fix generating, storing and loading of keystore
+  - fix asn1 encoding now using octet string instead of sequence
+- add `SubjectKeyIdentifier` to self-signed certificate
+- `SME_PROT_H` state: fix faulty parsing of messages in this state
+  and add parsing for `messageProtocolHandshakeError` messages
+- replace polling for timers with `ScheduledExecutors`
 - CMI state is no longer skipped after reconnection
 
 ## [1.0.0] - 2021-12-09
@@ -113,8 +130,8 @@ _Initial release._
 ### Added
 
 - implement SHIP v1.0.1
-- support secure TCP/IP connections using TLS/SSL Encryption (IETF RFC 5246) and
-  WebSockets (IETF RFC 6455)
+- support secure TCP/IP connections using TLS/SSL Encryption (IETF 
+  RFC 5246) and WebSockets (IETF RFC 6455)
 - support Certificate-Based authentication
 - support non-blocking, asynchronous authentication process
 - support discovery of active nodes using mDNS (IETF RFC 6762) and DNS-Based Service

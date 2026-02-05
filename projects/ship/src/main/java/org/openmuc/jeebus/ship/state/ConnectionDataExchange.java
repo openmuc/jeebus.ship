@@ -15,7 +15,7 @@ import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +42,7 @@ public class ConnectionDataExchange {
     ) {
         this.connection = connection;
         this.connHandler = connHandler;
-        this.well_knownProtocolId = Configuration.getWell_knownProtocolId();
+        this.well_knownProtocolId = StaticConfiguration.getWell_knownProtocolId();
         receivedMessageQueue = new LinkedList<>();
     }
 

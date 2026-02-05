@@ -16,19 +16,19 @@ public class ShipNodeContext {
 
     private final String ownShipId;
 
-    private Configuration config;
+    private StaticConfiguration config;
 
     private String logPrefix;
 
     private ConnectionHandler connHandler;
 
-    public ShipNodeContext(Configuration config, String ownShipId) {
+    public ShipNodeContext(StaticConfiguration config, String ownShipId) {
         this.config = config;
         this.ownShipId = ownShipId;
     }
 
     public ShipNodeContext(
-        Configuration config,
+        StaticConfiguration config,
         String logPrefix,
         ConnectionHandler connHandler,
         String ownShipId
@@ -39,11 +39,11 @@ public class ShipNodeContext {
         this.ownShipId = ownShipId;
     }
 
-    public Configuration getConfig() {
+    public StaticConfiguration getConfig() {
         return config;
     }
 
-    public void setConfig(Configuration config) {
+    public void setConfig(StaticConfiguration config) {
         this.config = config;
     }
 
