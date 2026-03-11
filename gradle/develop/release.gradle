@@ -1,0 +1,102 @@
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+def releaseFolder = new File("$projectDir/gradle/develop/release/")
+
+if (releaseFolder.exists()) {
+    releaseFolder.eachFile { file ->
+        if (file.name.endsWith('.gradle')) {
+            apply from: file.path
+        }
+    }
+}
+
+tasks.register('releaseFull') {
+    group = "release"
+    description = "Performs a full release process"
+
+    dependsOn(checkReleaseEndpoints)
+    dependsOn(setReleaseVersion)
+    dependsOn(clean, tarFull) //, uploadToOwncloud, releaseHugo)
+    dependsOn(publish)
+    finalizedBy setSnapshotVersion
+}
+
+tasks.register('checkReleaseEndpoints') {
+    group = "release"
+    doLast {
+        def endpoints = [
+            [desc: "Maven Central", url: 'https://repo1.maven.org'],
+            [desc: "Gitlab", url: 'https://gitlab.cc-asp.fraunhofer.de'],
+        ]
+
+        endpoints.each { endpoint ->
+            println "Checking ${endpoint.desc}: ${endpoint.url}"
+            try {
+                def connection = new URL(endpoint.url).openConnection()
+                connection.setRequestMethod('HEAD')
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                connection.connect()
+                if (connection.responseCode != 200) {
+                    throw new GradleException("${endpoint.desc} not found (HTTP ${connection.responseCode}) at ${endpoint.url}")
+                }
+                println "${endpoint.desc} available."
+            } catch (Exception e) {
+                throw new GradleException("Failed to reach ${endpoint.desc}: " + e.message)
+            }
+        }
+    }
+}
+
+def updateVersionInFile = { File file, String variable, String newValue ->
+    def text = file.text
+    def pattern = ~/${variable}\s*=\s*["'].*["']/
+    def replacement = "${variable} = \"${newValue}\""
+    if (!(text =~ pattern)) {
+        println "No match found in ${file.name} for variable ${variable}"
+    }
+    text = text.replaceAll(pattern, replacement)
+    file.text = text
+}
+
+
+tasks.register('setReleaseVersion') {
+    group = "release"
+    finalizedBy 'gitCommitRelease', 'gitTagRelease', 'gitPushRelease'
+    doLast {
+        def releaseVersion = project.findProperty('releaseVersion')
+        if (!releaseVersion) {
+            throw new GradleException("Please provide -PreleaseVersion=...")
+        }
+        project.version = releaseVersion
+        updateVersionInFile(file('configuration.gradle'), 'cfgVersion', releaseVersion)
+
+        println "Set release version: $releaseVersion"
+
+    }
+}
+
+tasks.register('setSnapshotVersion') {
+    group = "release"
+    doLast {
+        def nextSnapshotVersion = project.findProperty('nextSnapshotVersion')
+        if (!nextSnapshotVersion) {
+            throw new GradleException("Please provide -PnextSnapshotVersion=...")
+        }
+        project.version = "${nextSnapshotVersion}-SNAPSHOT"
+        updateVersionInFile(file('configuration.gradle'), 'cfgVersion', "${nextSnapshotVersion}-SNAPSHOT")
+
+        println "Set next snapshot version: ${nextSnapshotVersion}-SNAPSHOT"
+        finalizedBy(gitCommitSnapshot, gitPushSnapshot)
+        println("snapshot changes commited")
+    }
+}
+

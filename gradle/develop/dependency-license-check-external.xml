@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ~ Copyright 2026 Fraunhofer ISE
+  ~
+  ~ This program and the accompanying materials are made available under the
+  ~ terms of the Eclipse Public License 2.0 which is available at
+  ~ https://www.eclipse.org/legal/epl-2.0.
+  ~
+  ~ SPDX-License-Identifier: EPL-2.0
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-->
+
+<chapter title="External Dependencies" id="Libs">
+    <table>
+        <tr>
+            <td>Project</td>
+            <td>Version</td>
+            <td>License</td>
+        </tr>
+        <tr>
+            <td><a href="https://gradle.org/">Gradle Wrapper:</a></td>
+            <td>ersion `8.14.4` license `Apache-2.0`</td>
+            <td><a href="https://github.com/gradle/gradle#Apache-2.0-1-ov-file">Apache-2.0</a></td>
+        </tr>
+    </table>
+</chapter>

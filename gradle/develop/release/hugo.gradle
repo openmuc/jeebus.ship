@@ -1,0 +1,136 @@
+
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+// TODO: include the project in the branch
+tasks.register("releaseHugo") {
+    group = "release"
+    doLast {
+        def releaseTag = project.cfgVersion
+
+        if (!releaseTag || releaseTag == "unspecified") {
+            throw new GradleException("Please specify a release tag in config.gradle as cfgVersion")
+        }
+
+        println "Release tag is: $releaseTag"
+
+        def releaseDir = file(" /tmp/~${project.name}${releaseTag}")
+        if (releaseDir.exists()) {
+            println "Deleting existing directory: ${releaseDir}"
+            releaseDir.deleteDir()
+        }
+
+        def execOps = services.get(ExecOperations)
+        def branchExists = new ByteArrayOutputStream()
+        execOps.exec {
+            commandLine 'git', 'ls-remote', '--heads', 'origin', releaseTag
+            standardOutput = branchExists
+            errorOutput = branchExists
+            ignoreExitValue = true
+        }
+        if (branchExists.toString().trim()) {
+            throw new GradleException("Remote branch '${releaseTag}' already exists. Please use a new release tag or delete the remote branch first.")
+        }
+        println("after exec")
+        return
+
+        releaseDir.mkdirs()
+
+        exec {
+            workingDir releaseDir
+            commandLine "git", "clone", "https://gitlab.cc-asp.fraunhofer.de/openmuc/openmuc.org/openmuc-web.git"
+        }
+
+        def openmucWebDir = file("${releaseDir}/openmuc-web")
+        exec {
+            workingDir openmucWebDir
+            commandLine "git", "checkout", "-b", releaseTag
+        }
+
+        def openmucMdFile = file("doc/openmuc.md")
+        def modifiedContent = openmucMdFile.text
+            .replaceAll(/<img src="images\/(.*?)"/, '<img src="/images/$1"')
+            .replaceAll(/::include\{file=sections\/(.*?)\}/, '{{< readfile file="content/en/openmuc/sections/$1" >}}')
+
+        def tempMdFile = file("${buildDir}/openmuc.md")
+        tempMdFile.text = modifiedContent
+
+        def targetContentDir = file("${openmucWebDir}/content/en/${project.name}")
+
+        def targetOpenmuc = new File(targetContentDir, "openmuc.md")
+        if (targetOpenmuc.exists()) {
+            targetOpenmuc.delete()
+        }
+
+        def targetChangelog = new File(targetContentDir, "CHANGELOG.md")
+        if (targetChangelog.exists()) {
+            targetChangelog.delete()
+        }
+
+        def targetJavadocDir = file("${openmucWebDir}/static/javadoc-openmuc")
+        if (targetJavadocDir.exists()) {
+            delete targetJavadocDir
+        }
+
+        def targetDownload = new File(targetContentDir, "download_content.md")
+        if (targetDownload.exists()) {
+            targetDownload.delete()
+        }
+        copy {
+            from tempMdFile
+            into file("${openmucWebDir}/content/en/${project.name}")
+        }
+
+        copy {
+            from "doc/CHANGELOG.md"
+            into file("${openmucWebDir}/content/en/${project.name}")
+        }
+
+        copy {
+            from "build/docs/javadoc-all"
+            into targetJavadocDir
+        }
+
+        copy {
+            from "doc/download_content.md"
+            into file("${openmucWebDir}/content/en/${project.name}")
+        }
+
+        exec {
+            workingDir openmucWebDir
+            commandLine "git", "add", "."
+        }
+        exec {
+            workingDir openmucWebDir
+            commandLine "git", "commit", "-m", "Add test.md for version ${releaseTag}"
+        }
+        exec {
+            workingDir openmucWebDir
+            commandLine "git", "push", "origin", releaseTag
+        }
+
+        def gitlabToken = findProperty("gitLabPrivateToken")
+        if (!gitlabToken) {
+            throw new GradleException("No GitLab token set. Provide -PgitLabPrivateToken=YOUR_TOKEN or a token in ~/.gradle/gradle.properties")
+        }
+
+        exec {
+            commandLine "curl", "-X", "POST",
+                "-x", "http://${project.findProperty('systemProp.https.proxyHost')}:${project.findProperty('systemProp.https.proxyPort')}",
+                "-H", "PRIVATE-TOKEN: ${gitlabToken}",
+                "-d", "source_branch=${releaseTag}",
+                "-d", "target_branch=develop",
+                "-d", "title=Merge ${releaseTag} into develop",
+                "https://gitlab.cc-asp.fraunhofer.de/api/v4/projects/60594/merge_requests"
+        }
+
+        println "Release process complete in: $releaseDir"
+    }
+}

@@ -1,0 +1,210 @@
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+import groovy.xml.XmlSlurper
+
+import java.text.SimpleDateFormat
+
+def username = 'func_openmuc'
+def password = project.findProperty("ownCloudpwd")
+def server = 'https://oc.ise.fraunhofer.de'
+def remotePath = "/remote.php/dav/files/${username}/projects/openmuc/files/releases/"
+def shareApi = "${server}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+def outputMd = file('doc/download_raw.md') // the generated file will not have dates
+
+// Task 1: Upload (overwrites if file exists)
+tasks.register("uploadToOwncloud") {
+    group = "release"
+    doLast {
+        def tarFile = file('build/distributions/openmuc-0.20.2-SNAPSHOT.tgz')
+        def fileName = tarFile.name
+        // 1. Upload the file
+        // Upload the file to the specific remote directory
+        // if filename is same, it will overwrite the existing file
+        // exec {
+        //     commandLine "curl", "-u", "${username}:${password}",
+        //             "${server}${remotePath}${fileName}", // must specify filename
+        //             "-T", "${tarFile.absolutePath}"
+        // }
+        // println "Uploaded ${fileName} to ${remotePath}"
+
+        // 2. Generate/check public link
+        def relativePath = "projects/openmuc/files/releases/${fileName}"
+        def encodedRemotePath = java.net.URLEncoder.encode(relativePath, "UTF-8").replace("+", "%20")
+
+        // Check for existing public share
+        def getCmd = [
+            "curl", "-s", "-u", "${username}:${password}",
+            "-X", "GET",
+            "${shareApi}?path=${encodedRemotePath}&reshares=true",
+            "-H", "OCS-APIRequest: true"
+        ]
+        def getOutput = new ByteArrayOutputStream()
+        exec {
+            commandLine getCmd
+            standardOutput = getOutput
+        }
+        def xml = new XmlSlurper().parseText(getOutput.toString())
+        def publicLinks = []
+        xml.data.element.each { elem ->
+            if (elem.share_type?.text() == "3" && elem.url?.text()) {
+                publicLinks << elem.url.text()
+            }
+        }
+        // Also handle the case of only one <element>
+        if (publicLinks.isEmpty() && xml.data.element.share_type?.text() == "3") {
+            publicLinks << xml.data.element.url.text()
+        }
+        def publicLink = publicLinks ? publicLinks[0] : null
+
+        // If no public link exists, create one
+        if (!publicLink) {
+            def postData = "path=${relativePath}&shareType=3"
+            println(postData)
+            def postOutput = new ByteArrayOutputStream()
+            exec {
+                commandLine "curl", "-s", "-u", "${username}:${password}",
+                    "-X", "POST", shareApi,
+                    "-d", postData,
+                    "-H", "OCS-APIRequest: true"
+                standardOutput = postOutput
+            }
+            def xmlPost = new XmlSlurper().parseText(postOutput.toString())
+            println(xmlPost)
+            publicLink = xmlPost.data.url.text()
+        }
+
+        // Output
+        if (publicLink) {
+            println "[${fileName}](${publicLink})"
+            // Write to doc/download_content.md at the top
+            def downloadMd = file('doc/download_content.md')
+            def dateStr = new SimpleDateFormat("dd-MMM-yyyy").format(new Date())
+            def newLine = "${dateStr}: [${fileName}](${publicLink}/download)" + "  \n"
+            // Read existing content
+            def oldContent = downloadMd.exists() ? downloadMd.text : ""
+            // Write new content at the top
+            downloadMd.text = newLine + oldContent
+            println(publicLink)
+        } else {
+            println "${fileName}: (Failed to create/share)"
+        }
+    }
+}
+
+// Task 2: Generate/check public links for all remote files
+tasks.register("generateOwncloudLinks") {
+    group = "release"
+    doLast {
+        //        def dateStr = new SimpleDateFormat("dd-MMM-yyyy").format(new Date())
+        outputMd.text = "# Public Links for Release Files\n\n"
+
+        // List files on remote Owncloud folder using WebDAV PROPFIND
+        def listCmd = [
+            "curl", "-s", "-u", "${username}:${password}",
+            "-X", "PROPFIND", "${server}${remotePath}", "-H", "Depth: 1"
+        ]
+        def listOutput = new ByteArrayOutputStream()
+        exec {
+            commandLine listCmd
+            standardOutput = listOutput
+        }
+
+        def xmlList = new XmlSlurper().parseText(listOutput.toString())
+
+        // Collect only .tgz files with their hrefs
+        def tgzFiles = []
+        xmlList.'**'.findAll { it.name() == 'href' }.each { href ->
+            def fileHref = href.text()
+            def fileName = fileHref.tokenize('/').last()
+            if (!fileName || fileName == '' || fileHref.endsWith('/')) return
+            if (!fileName.endsWith(".tgz") || fileName.contains("_full.tgz")) return
+            tgzFiles << [name: fileName, href: fileHref]
+        }
+
+        // Version-aware sorting (descending)
+        tgzFiles.sort { a, b ->
+            def versionA = (a.name =~ /([0-9]+(?:\.[0-9]+)*)(?:_full)?\.tgz/)[0][1]
+            def versionB = (b.name =~ /([0-9]+(?:\.[0-9]+)*)(?:_full)?\.tgz/)[0][1]
+            // Split versions into int lists for proper comparison
+            def va = versionA.tokenize('.').collect { it as int }
+            def vb = versionB.tokenize('.').collect { it as int }
+            // Descending order: b then a
+            for (int i = 0; i < [va.size(), vb.size()].max(); i++) {
+                def ai = (i < va.size()) ? va[i] : 0
+                def bi = (i < vb.size()) ? vb[i] : 0
+                if (ai != bi) return bi <=> ai
+            }
+            // If versions are equal, sort full before non-full
+            return (b.name.contains('_full') ? 1 : 0) <=> (a.name.contains('_full') ? 1 : 0)
+        }
+
+        // Now generate links in sorted order
+        tgzFiles.each { file ->
+            def fileName = file.name
+
+            // Path must be relative to user root for the share API:
+            def relativePath = "projects/openmuc/files/releases/${fileName}"
+            def encodedRemotePath = java.net.URLEncoder.encode(relativePath, "UTF-8").replace("+", "%20")
+
+            // 1. Check for existing public share
+            def getCmd = [
+                "curl", "-s", "-u", "${username}:${password}",
+                "-X", "GET",
+                "${shareApi}?path=${encodedRemotePath}&reshares=true",
+                "-H", "OCS-APIRequest: true"
+            ]
+            def getOutput = new ByteArrayOutputStream()
+            exec {
+                commandLine getCmd
+                standardOutput = getOutput
+            }
+            def xml = new XmlSlurper().parseText(getOutput.toString())
+            // Find all public (share_type==3) links
+            def publicLinks = []
+            xml.data.element.each { elem ->
+                if (elem.share_type?.text() == "3" && elem.url?.text()) {
+                    publicLinks << elem.url.text()
+                }
+            }
+            // Also handle the case of only one <element>
+            if (publicLinks.isEmpty() && xml.data.element.share_type?.text() == "3") {
+                publicLinks << xml.data.element.url.text()
+            }
+
+            def publicLink = publicLinks ? publicLinks[0] : null
+
+            // If no public link exists, create one
+            if (!publicLink) {
+                def postData = "path=${relativePath}&shareType=3"
+                def postOutput = new ByteArrayOutputStream()
+                exec {
+                    commandLine "curl", "-s", "-u", "${username}:${password}",
+                        "-X", "POST", shareApi,
+                        "-d", postData,
+                        "-H", "OCS-APIRequest: true"
+                    standardOutput = postOutput
+                }
+                def xmlPost = new XmlSlurper().parseText(postOutput.toString())
+                publicLink = xmlPost.data.url.text()
+            }
+
+            // Output
+            if (publicLink) {
+                outputMd << "- [${fileName}](${publicLink})\n"
+                println "[${fileName}](${publicLink})"
+            } else {
+                outputMd << "- ${fileName}: (Failed to create/share)\n"
+                println "${fileName}: (Failed to create/share)"
+            }
+        }
+        println "Public links written to ${outputMd.absolutePath}"
+    }
+}

@@ -1,0 +1,79 @@
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+project.ext {
+
+    cfgProjectGroup = "org.openmuc.jeebus"
+    cfgProjectName = "ship"
+    cfgVersion = "2.2.0"
+
+    // Release settings
+
+    cfgGitLabProjectId = "11230"
+
+    cfgPomName = "jEEBus.SHIP"
+    cfgPomDescription = "jEEBus.SHIP is a Java implementation of the Smart Home" +
+        " Internet Protocol (SHIP) which represents the transport layer of the" +
+        " EEBus Communication Standard."
+    cfgPomProjectUrl = "https://www.openmuc.org/eebus/"
+
+    cfgPomLicenseName = "Eclipse Public License 2.0"
+    cfgPomLicenseUrl = "https://www.eclipse.org/legal/epl-2.0"
+
+    cfgPomScmUrl = "https://www.openmuc.org/eebus/ship/download/"
+
+    cfgSnapshotPattern = ~/\d+\.\d+\.\d+.*SNAPSHOT.*/
+
+    distributionProjects = subprojects.findAll {
+        it.getPath() == ":ship"
+    }
+
+    if (cfgVersion.matches(cfgSnapshotPattern)) {
+        repositoryProjects = subprojects
+        isReleaseVersion = false
+    } else {
+        repositoryProjects = distributionProjects
+        isReleaseVersion = true
+    }
+
+    javadocIncludes = [
+        '**/api/**',
+        '**/examples/**'
+    ]
+    javadocExcludes = []
+}
+
+tasks.withType(Tar) {
+    dependsOn checkLicense
+
+    into(project.name) {
+        from("./") {
+            exclude "**/build/**"
+            exclude "**/keystore"
+
+            include "build.gradle"
+            include "configuration.gradle"
+            include "settings.gradle"
+            include "LICENSE"
+            include "CHANGELOG.md"
+            include "gradle/wrapper/**"
+            include "gradlew"
+            include "gradlew.bat"
+            include "projects/**"
+            include ".idea/codeStyles/**"
+        }
+        from('distribute/') {
+            include '*'
+        }
+        from('build/licenses/') {
+            include 'THIRD-PARTY-LICENSES.md'
+        }
+    }
+}

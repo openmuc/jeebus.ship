@@ -1,0 +1,188 @@
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+package org.openmuc.jeebus.ship.state.machine;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.openmuc.jeebus.ship.message.MessageUtility;
+import org.openmuc.jeebus.ship.message.ShipMessageFactory;
+import org.openmuc.jeebus.ship.message.smeproth.ProtHError;
+import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeMsg;
+import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
+import org.openmuc.jeebus.ship.util.InstrumentedStateMachine;
+import org.openmuc.jeebus.ship.util.StateMachineAssertions;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.openmuc.jeebus.ship.message.smeproth.ProtHError.UNEXPECTED_MESSAGE;
+import static org.openmuc.jeebus.ship.state.machine.State.*;
+import static org.openmuc.jeebus.ship.util.StateMachineAssertions.*;
+import static org.openmuc.jeebus.ship.util.StateMachineAssertions.assertState;
+
+public class ProtocolHandshakeTests {
+    private static final int DEFAULT_WAIT_TIMER = 10;
+
+    @Test
+    public void serverEntersListen() {
+        InstrumentedStateMachine machine = new InstrumentedStateMachine(
+            true,
+            SME_PROT_H_SERVER_INIT
+        );
+
+        machine.triggerEntered(null);
+        assertState(machine, SME_PROT_H_STATE_SERVER_LISTEN_PROPOSAL);
+    }
+
+    @Test
+    public void clientSendsProposalThenWaits() {
+        InstrumentedStateMachine machine = new InstrumentedStateMachine(
+            false,
+            SME_PROT_H_CLIENT_INIT
+        );
+        machine.triggerEntered(null);
+
+        ProtocolHandshakeMsg msg
+            = MessageUtility.preprocessProtHMsg(machine.getLatestMessage());
+        assertEquals(ProtocolHandshakeTypeType.ANNOUNCE_MAX, msg.getHandshakeType());
+        assertEquals(1, msg.getMajor());
+        assertEquals(0, msg.getMinor());
+        assertIterableEquals(List.of("JSON-UTF8"), msg.getFormats());
+
+        assertEquals(
+            DEFAULT_WAIT_TIMER,
+            machine.getTimeoutStatus(SpecifiedTimeout.SME_PROTH_WAIT)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("serverAbortsOnInvalidMessage_args")
+    public void serverAbortsOnInvalidMessage(ProtHError expectedError, byte[] msg) {
+        InstrumentedStateMachine machine = new InstrumentedStateMachine(
+            true,
+            SME_PROT_H_SERVER_INIT
+        );
+
+        machine.triggerEntered(null);
+        assertState(machine, SME_PROT_H_STATE_SERVER_LISTEN_PROPOSAL);
+
+        machine.messageReceived(msg);
+
+        assertMachineAbortedProtocolHandshake(machine, expectedError);
+    }
+
+    public static Stream<Arguments> serverAbortsOnInvalidMessage_args() {
+        return Stream.of(
+            Arguments.argumentSet(
+                "wrong handshakeType",
+                UNEXPECTED_MESSAGE,
+                ShipMessageFactory.parseSmeProtHBody(
+                    ProtocolHandshakeTypeType.SELECT,
+                    1,
+                    0,
+                    List.of("JSON-UTF8")
+                )
+            ),
+            Arguments.argumentSet("major version too low",
+                UNEXPECTED_MESSAGE,
+                ShipMessageFactory.parseSmeProtHBody(
+                    ProtocolHandshakeTypeType.ANNOUNCE_MAX,
+                    0,
+                    0,
+                    List.of("JSON-UTF8")
+                )
+            ),
+            Arguments.argumentSet("no supported formats",
+                UNEXPECTED_MESSAGE,
+                "\001{'messageProtocolHandshake':[{'handshakeType':'announceMax'},{'version':[{'major':1},{'minor':0}]},{'formats':[{'format':[]}]}]}"
+                    .replace('\'', '"')
+                    .getBytes(StandardCharsets.UTF_8)
+            ),
+            Arguments.argumentSet("malformed format list",
+                UNEXPECTED_MESSAGE,
+                ShipMessageFactory.parseSmeProtHBody(
+                    ProtocolHandshakeTypeType.ANNOUNCE_MAX,
+                    1,
+                    0,
+                    List.of("")
+                )
+            ),
+            Arguments.argumentSet("not a protocol handshake message",
+                UNEXPECTED_MESSAGE,
+                ShipMessageFactory.parseSmePinBody("1234abcd")
+            ),
+            Arguments.argumentSet("random byte sequence",
+                UNEXPECTED_MESSAGE,
+                // securely randomly generated by smashing hand onto numpad
+                new byte[]{94, 65, 13, -94, 16, -64, 31, 18}
+            )
+        );
+    }
+
+    @Test
+    public void peersSelectSupportedProtocol() {
+        InstrumentedStateMachine server = new InstrumentedStateMachine(
+            true,
+            SME_PROT_H_SERVER_INIT
+        );
+        server.stoppingSet(Set.of(SME_PROT_H_STATE_SERVER_OK));
+        server.triggerEntered(null);
+        assertState(server, SME_PROT_H_STATE_SERVER_LISTEN_PROPOSAL);
+
+        server.messageReceived(ShipMessageFactory.parseSmeProtHBody(
+            ProtocolHandshakeTypeType.ANNOUNCE_MAX,
+            1,
+            0,
+            List.of("JSON-UTF8")
+        ));
+
+        assertState(server, SME_PROT_H_STATE_SERVER_LISTEN_CONFIRM);
+
+        byte[] serverMessage = server.getLatestMessage();
+        ProtocolHandshakeMsg reply
+            = MessageUtility.preprocessProtHMsg(serverMessage);
+
+        assertEquals(ProtocolHandshakeTypeType.SELECT, reply.getHandshakeType());
+        assertEquals(1, reply.getMajor());
+        assertEquals(0, reply.getMinor());
+        assertIterableEquals(List.of("JSON-UTF8"), reply.getFormats());
+
+        InstrumentedStateMachine client  = new InstrumentedStateMachine(
+            false,
+            SME_PROT_H_STATE_CLIENT_LISTEN_CHOICE
+        );
+        client.triggerEntered(null);
+        client.stoppingSet(Set.of(SME_PROT_H_STATE_CLIENT_OK));
+
+        client.messageReceived(serverMessage);
+        assertState(client, SME_PROT_H_STATE_CLIENT_OK);
+        assertNull(client.getTimeoutStatus(SpecifiedTimeout.SME_PROTH_WAIT));
+
+        byte[] confirmBytes = client.getLatestMessage();
+        ProtocolHandshakeMsg confirm
+            = MessageUtility.preprocessProtHMsg(confirmBytes);
+        assertEquals(ProtocolHandshakeTypeType.SELECT, confirm.getHandshakeType());
+        assertEquals(1, confirm.getMajor());
+        assertEquals(0, confirm.getMinor());
+        assertIterableEquals(List.of("JSON-UTF8"), confirm.getFormats());
+
+        server.messageReceived(confirmBytes);
+        assertState(server, SME_PROT_H_STATE_SERVER_OK);
+        assertNull(server.getTimeoutStatus(SpecifiedTimeout.SME_PROTH_WAIT));
+    }
+
+    // TODO more tests
+}

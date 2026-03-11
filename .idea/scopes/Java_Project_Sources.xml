@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="Java Project Sources" pattern="file:*.java&amp;&amp;!src[ship-root]:*..*&amp;&amp;!lib:*..*" />
+</component>

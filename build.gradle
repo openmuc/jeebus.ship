@@ -1,0 +1,167 @@
+/********************************************************************************
+ * Copyright (c) 2026 Fraunhofer ISE
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * https://www.eclipse.org/legal/epl-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ ********************************************************************************/
+
+buildscript {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    id 'idea'
+    id 'java-library'
+    // https://mvnrepository.com/artifact/biz.aQute.bnd.builder/biz.aQute.bnd.builder.gradle.plugin
+    id "biz.aQute.bnd.builder" version "6.4.0"
+    // https://github.com/gradle-dependency-analyze/gradle-dependency-analyze
+    id "ca.cutterslade.analyze" version "2.0.0"
+    // https://github.com/jk1/Gradle-License-Report
+    id 'com.github.jk1.dependency-license-report' version '2.6'
+    // https://github.com/vanniktech/gradle-maven-publish-plugin
+    id "com.vanniktech.maven.publish" version "0.34.0"
+}
+
+jar.enabled = false
+
+def internalFolder = new File("$projectDir/gradle/develop/")
+
+if (internalFolder.exists()) {
+    internalFolder.eachFile { file ->
+        if (file.name.endsWith('.gradle')) {
+            apply from: file.path
+        }
+    }
+}
+
+apply plugin: 'ca.cutterslade.analyze'
+
+apply plugin: 'idea'
+
+idea {
+    module {
+        name = 'SHIP'
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+apply from: "configuration.gradle"
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'biz.aQute.bnd.builder'
+
+    group = cfgProjectGroup
+    version = cfgVersion
+    sourceCompatibility = 1.11
+    targetCompatibility = 1.11
+
+    def destinationDir = new File("$rootDir/build/")
+
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
+
+    dependencies {
+        // These dependencies are exported to consumers, that is to say found on their compile classpath.
+        // https://mvnrepository.com/artifact/com.google.code.gson/gson
+        api 'com.google.code.gson:gson:2.13.2'
+        // https://mvnrepository.com/artifact/org.jmdns/jmdns
+        api 'org.jmdns:jmdns:3.6.3'
+
+        implementation platform("org.bouncycastle:bc-jdk18on-bom:1.83")
+        // https://mvnrepository.com/artifact/org.bouncycastle/bcpkix-jdk18on
+        implementation "org.bouncycastle:bcpkix-jdk18on"
+        // https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk18on
+        implementation "org.bouncycastle:bcprov-jdk18on"
+
+        // Beware of case-sensitivity >_<
+        // https://mvnrepository.com/artifact/io.netty/netty-bom
+        implementation platform("io.netty:netty-bom:4.2.10.Final")
+
+        // https://mvnrepository.com/artifact/io.netty
+        implementation "io.netty:netty-buffer"
+        implementation "io.netty:netty-codec-http"
+        implementation "io.netty:netty-codec-base"
+        implementation "io.netty:netty-common"
+        implementation "io.netty:netty-handler"
+        implementation "io.netty:netty-transport"
+
+        // used for jsr305 null handling annotations
+        // https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305
+        implementation 'com.google.code.findbugs:jsr305:3.0.2'
+
+        // https://mvnrepository.com/artifact/org.slf4j/slf4j-api
+        implementation 'org.slf4j:slf4j-api:2.0.17'
+
+
+        // https://mvnrepository.com/artifact/org.jmock/jmock
+        testImplementation 'org.jmock:jmock:2.13.1'
+        // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api
+        testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.2'
+        // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-params
+        testImplementation("org.junit.jupiter:junit-jupiter-params:5.11.2")
+        // https://mvnrepository.com/artifact/org.mockito/mockito-core
+        testImplementation 'org.mockito:mockito-core:4.11.0'
+        // https://mvnrepository.com/artifact/org.mockito/mockito-junit-jupiter
+        testImplementation 'org.mockito:mockito-junit-jupiter:4.11.0'
+        // https://mvnrepository.com/artifact/org.hamcrest/hamcrest
+        testImplementation 'org.hamcrest:hamcrest:2.2'
+        // https://mvnrepository.com/artifact/org.awaitility/awaitility
+        testImplementation 'org.awaitility:awaitility:4.2.0'
+
+        // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine
+        testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.2'
+        // https://mvnrepository.com/artifact/ch.qos.logback/logback-classic
+        testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.16'
+    }
+
+    jar {
+        onlyIf { project.name != rootProject.name }
+        destinationDirectory = destinationDir
+        bnd(
+            'Bundle-Name': project.name,
+            'Bundle-Vendor': 'Fraunhofer ISE', 'Bundle-SymbolicName': project.group + '.' + project.name,
+            'Export-Package': 'org.openmuc.jeebus.ship.api, org.openmuc.jeebus.ship.shipconnection'
+        )
+    }
+
+    test {
+        // this stops gradle from skipping up-to-date test tasks
+        outputs.upToDateWhen { false }
+
+        useJUnitPlatform()
+        testLogging.showStandardStreams = true
+    }
+}
+
+javadoc {
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.addBooleanOption('html5', true)
+    }
+
+    source distributionProjects.collect {
+        project -> project.sourceSets.main.allJava
+    }
+
+    javadocIncludes.each { include it }
+    javadocExcludes.each { exclude it }
+
+    destinationDir = new File(buildDir, "docs/javadoc-all")
+
+    classpath = files(distributionProjects.collect { project ->
+        project.sourceSets.main.compileClasspath
+    })
+
+    classpath += files(distributionProjects.collect { project ->
+        project.sourceSets.main.output
+    })
+}

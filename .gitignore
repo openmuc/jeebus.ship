@@ -1,0 +1,32 @@
+# Ignore temporary resources
+\\tmp\\*
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+# Ignore intellij project files
+.idea/*
+# Except the ones we want
+!.idea/codeStyles/
+!.idea/copyright/
+!.idea/inspectionProfiles/
+!.idea/scopes/
+!.idea/icon.svg
+!.idea/.name
+
+# Ignore generated resources
+projects/ship/src/test/resources/etc
+projects/ship/src/main/resources/etc
+
+# Ignore Eclipse project files
+.project
+.classpath
+.settings/
+bin/
+
+# KDE folder settings
+.directory
+/logs/
