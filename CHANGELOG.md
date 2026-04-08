@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.1] - 
+
+### Changed
+### Added
+### Fixed
+
 ## [2.2.0] - 2026-04-08
 
 _First Open-Source Release under the EPL-2.0_
