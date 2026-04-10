@@ -3,7 +3,8 @@
 
 [//]: # (<img src=".idea/icon.svg" width="200" style="float: right" align="right"/>)
 
-[![maven-central](https://img.shields.io/maven-central/v/org.openmuc.jeebus/ship)](https://mvnrepository.com/artifact/org.openmuc.jeebus/ship/latest)
+[![maven-central](https://img.shields.io/maven-central/v/org.openmuc.jeebus/ship?logo=apachemaven)](https://central.sonatype.com/artifact/org.openmuc.jeebus/ship)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openmuc/jeebus.ship)
 
 This repository contains the Java implementation of the Smart Home Internet Protocol
 v1.0.1 (SHIP) which represents the transport layer of
