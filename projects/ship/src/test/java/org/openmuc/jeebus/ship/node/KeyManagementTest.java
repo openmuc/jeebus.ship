@@ -15,14 +15,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.Execution;
+import org.openmuc.jeebus.ship.api.cert.CertificateInfo;
+import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 
-import java.io.IOException;
+import java.io.File;
 import java.nio.file.Path;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -46,11 +43,10 @@ public class KeyManagementTest {
     private KeyManagement km;
 
     @BeforeEach
-    public void setUp() throws UnrecoverableKeyException, CertificateException,
-        KeyStoreException, IOException,
-        NoSuchAlgorithmException, NoSuchProviderException {
-        pathToKeyStore = tempDir.toString() + "/keystore.jks";
-        km = new KeyManagement(pathToKeyStore.replace("/", "\\"),
+    public void setUp() throws CertificateStoreException {
+        pathToKeyStore = tempDir.toString() + File.pathSeparator + "keystore.jks";
+        km = new KeyManagement(
+            pathToKeyStore,
             alias,
             keyStorePassphrase,
             keyPairPassphrase,

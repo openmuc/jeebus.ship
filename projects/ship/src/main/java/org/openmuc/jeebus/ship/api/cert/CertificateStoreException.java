@@ -8,17 +8,14 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-package org.openmuc.jeebus.ship.node;
+package org.openmuc.jeebus.ship.api.cert;
 
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
+/**
+ * Thrown when a CertificateStorage failed to load or store a certificate.
+ */
+public class CertificateStoreException extends Exception {
 
-public class CertificateInfo {
-    public final PrivateKey privateKey;
-    public final X509Certificate certificate;
-
-    public CertificateInfo(PrivateKey privateKey, X509Certificate certificate) {
-        this.privateKey = privateKey;
-        this.certificate = certificate;
+    public CertificateStoreException(String message, Exception innerException) {
+        super(message, innerException);
     }
 }

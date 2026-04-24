@@ -10,10 +10,14 @@
 
 package org.openmuc.jeebus.ship.api;
 
+import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
+import org.openmuc.jeebus.ship.api.cert.KeyStoreCertificateStorage;
+import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,12 +43,66 @@ public class ShipNodeConfiguration {
 
     private String serviceInstance;
 
-    private String alias;
-    private String certPath;
-    private char[] keyStorePassphrase;
-    private char[] keyPairPassphrase;
+    private CertificateStorage certificateStorage;
+
     private String distinguishedName;
+
     private int certificateValidityInDays;
+
+    /**
+     * Wrapper class for parameters for initial ship node configuration. If a
+     * certificate should be loaded or stored, use the other constructor instead
+     *
+     * @param ipAddresses
+     *     ip addresses of network interfaces to bind this Ship node to, example:
+     *     ["192.168.1.2" /* ethernet * /, "::1" /* loopback * /]
+     * @param port
+     *     port for initial server
+     * @param wssPath
+     *     wss path for initial server, example: "/ship/"
+     * @param keepAlive
+     *     indicates if keepAlive packets are allowed
+     * @param serviceId
+     *     host name for JmDNS instance (service discovery), example:
+     *     "EXAMPLEBRAND-EEB01M3EU-001122334455"
+     * @param serviceDomain
+     *     which domain for service types to listen to, example: "local"
+     * @param serviceInstance
+     *     service instance label for initial server, example: "Dishwasher
+     *     ExampleCompany EEB01M3EU"
+     * @param certificateStorage
+     *     certificate storage used to load and store the key pair
+     * @param distinguishedName
+     *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
+     *     usually the DeviceID
+     * @param certificateValidityInDays
+     *     how many days the certificate should be valid for
+     */
+    public ShipNodeConfiguration(
+        Set<String> ipAddresses,
+        int port,
+        String wssPath,
+        boolean keepAlive,
+        String serviceId,
+        String serviceDomain,
+        String serviceInstance,
+        CertificateStorage certificateStorage,
+        String distinguishedName,
+        int certificateValidityInDays
+    ) {
+        this(
+            ipAddresses,
+            port,
+            wssPath,
+            keepAlive,
+            serviceId,
+            serviceDomain,
+            serviceInstance,
+            distinguishedName,
+            certificateValidityInDays
+        );
+        this.certificateStorage = certificateStorage;
+    }
 
     /**
      * Wrapper class for parameters for initial ship node configuration. If a
@@ -93,6 +151,58 @@ public class ShipNodeConfiguration {
         String distinguishedName,
         int certificateValidityInDays
     ) {
+        this(
+            ipAddresses,
+            port,
+            wssPath,
+            keepAlive,
+            serviceId,
+            serviceDomain,
+            serviceInstance,
+            new MemoryCertificateStorage(),
+            distinguishedName,
+            certificateValidityInDays
+        );
+    }
+
+    /**
+     * Wrapper class for parameters for initial ship node configuration. If a
+     * certificate should be loaded or stored, use the other constructor instead
+     *
+     * @param ipAddresses
+     *     ip addresses of network interfaces to bind this Ship node to, example:
+     *     ["192.168.1.2" /* ethernet * /, "::1" /* loopback * /]
+     * @param port
+     *     port for initial server
+     * @param wssPath
+     *     wss path for initial server, example: "/ship/"
+     * @param keepAlive
+     *     indicates if keepAlive packets are allowed
+     * @param serviceId
+     *     host name for JmDNS instance (service discovery), example:
+     *     "EXAMPLEBRAND-EEB01M3EU-001122334455"
+     * @param serviceDomain
+     *     which domain for service types to listen to, example: "local"
+     * @param serviceInstance
+     *     service instance label for initial server, example: "Dishwasher
+     *     ExampleCompany EEB01M3EU"
+     * @param distinguishedName
+     *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
+     *     usually the DeviceID
+     * @param certificateValidityInDays
+     *     how many days the certificate should be valid for
+     */
+    private ShipNodeConfiguration(
+        Set<String> ipAddresses,
+        int port,
+        String wssPath,
+        boolean keepAlive,
+        String serviceId,
+        String serviceDomain,
+        String serviceInstance,
+        String distinguishedName,
+        int certificateValidityInDays
+    ) {
         this.ipAddresses = ipAddresses.stream().map(str -> {
             try {
                 return InetAddress.getByName(str);
@@ -109,9 +219,7 @@ public class ShipNodeConfiguration {
         this.serviceId = serviceId;
         this.serviceDomain = serviceDomain;
         this.serviceInstance = serviceInstance;
-        this.alias = alias;
-        this.keyStorePassphrase = keyStorePassphrase;
-        this.keyPairPassphrase = keyPairPassphrase;
+        this.certificateStorage = new MemoryCertificateStorage();
         this.distinguishedName = distinguishedName;
         this.certificateValidityInDays = certificateValidityInDays;
     }
@@ -208,7 +316,12 @@ public class ShipNodeConfiguration {
             distinguishedName,
             certificateValidityInDays
         );
-        this.certPath = parsePath(certPath);
+        this.certificateStorage = new KeyStoreCertificateStorage(
+            certPath,
+            alias,
+            keyStorePassphrase,
+            keyPairPassphrase
+        );
     }
 
     /**
@@ -283,7 +396,12 @@ public class ShipNodeConfiguration {
             distinguishedName,
             certificateValidityInDays
         );
-        this.certPath = parsePath(certPath);
+        this.certificateStorage = new KeyStoreCertificateStorage(
+            certPath,
+            alias,
+            keyStorePassphrase,
+            keyPairPassphrase
+        );
     }
 
     /**
@@ -355,7 +473,12 @@ public class ShipNodeConfiguration {
             distinguishedName,
             certificateValidityInDays
         );
-        this.certPath = parsePath(certPath);
+        this.certificateStorage = new KeyStoreCertificateStorage(
+            certPath,
+            alias,
+            keyStorePassphrase,
+            keyPairPassphrase
+        );
     }
 
 
@@ -421,10 +544,6 @@ public class ShipNodeConfiguration {
             distinguishedName,
             certificateValidityInDays
         );
-    }
-
-    private String parsePath(String path) {
-        return path.replace("/", "\\");
     }
 
     public boolean isClientOnly() {
@@ -514,27 +633,27 @@ public class ShipNodeConfiguration {
     }
 
     public String getAlias() {
-        return alias;
-    }
-
-    public void setAlias(String alias) {
-        this.alias = alias;
+        return this.getKeyStoreCertStore()
+            .map(KeyStoreCertificateStorage::getAlias)
+            .orElse(null);
     }
 
     public String getCertPath() {
-        return certPath;
-    }
-
-    public void setCertPath(String certPath) {
-        this.certPath = certPath;
+        return this.getKeyStoreCertStore()
+            .map(KeyStoreCertificateStorage::getPathToKeyStore)
+            .orElse(null);
     }
 
     public char[] getKeyStorePassphrase() {
-        return keyStorePassphrase;
+        return this.getKeyStoreCertStore()
+            .map(KeyStoreCertificateStorage::getKeyStorePassphrase)
+            .orElse(null);
     }
 
     public char[] getKeyPairPassphrase() {
-        return keyPairPassphrase;
+        return this.getKeyStoreCertStore()
+            .map(KeyStoreCertificateStorage::getKeyPairPassphrase)
+            .orElse(null);
     }
 
     public String getDistinguishedName() {
@@ -543,6 +662,13 @@ public class ShipNodeConfiguration {
 
     public int getCertificateValidityInDays() {
         return certificateValidityInDays;
+    }
+
+    private Optional<KeyStoreCertificateStorage> getKeyStoreCertStore() {
+        if (!(this.certificateStorage instanceof KeyStoreCertificateStorage)) {
+            return Optional.empty();
+        }
+        return Optional.of((KeyStoreCertificateStorage) this.certificateStorage);
     }
 
     @Override
@@ -556,11 +682,7 @@ public class ShipNodeConfiguration {
             ", serviceId='" + serviceId + '\'' +
             ", serviceDomain='" + serviceDomain + '\'' +
             ", serviceInstance='" + serviceInstance + '\'' +
-            ", alias='" + alias + '\'' +
-            ", certPath='" + certPath + '\'' +
-            // Maybe not output any passwords...
-            // ", keyStorePassphrase=" + Arrays.toString(keyStorePassphrase) +
-            // ", keyPairPassphrase=" + Arrays.toString(keyPairPassphrase) +
+            ", certificateStorage='" + certificateStorage + '\'' +
             ", dn='" + distinguishedName + '\'' +
             ", days=" + certificateValidityInDays +
             '}';

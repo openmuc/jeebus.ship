@@ -27,21 +27,15 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.util.encoders.Hex;
+import org.openmuc.jeebus.ship.api.cert.*;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.node.websocket.SkiManagementInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.crypto.spec.SecretKeySpec;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.math.BigInteger;
-import java.nio.channels.FileLock;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.*;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
@@ -50,6 +44,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -60,11 +55,7 @@ public class KeyManagement {
     protected static final Logger log = LoggerFactory.getLogger(KeyManagement.class);
     private static final Map<String, SkiManagementInfo> trustedSkis
         = new ConcurrentHashMap<>();
-    private final KeyPair keyPair;
-    private final String pathToKeyStore;
     private final CertificateInfo cert;
-    private final char[] keyStorePass;
-    private final char[] keyPairPass;
     private final SubjectKeyIdentifier ownSki;
 
     /**
@@ -88,20 +79,8 @@ public class KeyManagement {
      *     usually the DeviceID
      * @param days
      *     how many days the certificate should be valid for
-     * @throws KeyStoreException
-     *     if a KeyStoreSpi implementation for the specified type is not available
-     *     from the specified provider
-     * @throws NoSuchProviderException
-     *     if the specified provider is not registered in the security provider list
-     * @throws IOException
-     *     if there is an I/O or format problem with the keystore data, if a password
-     *     is required but not given, or if the given password was incorrect
-     * @throws CertificateException
-     *     if any of the certificates in the keystore could not be loaded
-     * @throws NoSuchAlgorithmException
-     *     if the appropriate data integrity algorithm could not be found
-     * @throws UnrecoverableKeyException
-     *     if the key cannot be recovered (e.g., the given password is wrong).
+     * @throws CertificateStoreException
+     *     if the certificate storage implementation fails to load or store the key
      */
     public KeyManagement(
         String pathToKeyStore,
@@ -110,53 +89,72 @@ public class KeyManagement {
         char[] keyPairPassphrase,
         String distinguishedName,
         int days
-    ) throws
-        KeyStoreException,
-        NoSuchProviderException,
-        IOException,
-        CertificateException,
-        NoSuchAlgorithmException,
-        UnrecoverableKeyException
+    ) throws CertificateStoreException
     {
-        Objects.requireNonNull(alias);
-        this.pathToKeyStore = pathToKeyStore;
-        this.keyStorePass = keyStorePassphrase;
-        this.keyPairPass = keyPairPassphrase;
-        addBCProvider();
-        KeyStore keyStore = loadKeyStore();
-        if (keyStore.containsAlias(alias)) {
-            Certificate certificate = keyStore.getCertificate(alias);
-
-            Key key = keyStore.getKey(alias, keyPairPassphrase);
-            if (key instanceof PrivateKey) {
-                keyPair = new KeyPair(certificate.getPublicKey(), (PrivateKey) key);
-                ownSki = generateSki(certificate.getPublicKey());
-                cert = new CertificateInfo(
-                    (PrivateKey) key,
-                    (X509Certificate) certificate
-                );
-            }
-            else {
-                throw new IllegalArgumentException(
-                    "The key stored in the specified key store does not contain a"
-                        + " valid private key under the given alias"
-                );
-            }
-        }
-        else {
-            log.info(
-                "No certificate was found for alias {}. Creating a new one.",
-                alias
-            );
-            keyPair = createKeyPair();
-            ownSki = generateSki(keyPair.getPublic());
-            cert = createCertificate(keyPair, distinguishedName, days, null);
-            storeCertificate(alias);
-        }
+        this(createCertificateStorage(
+            pathToKeyStore,
+            alias,
+            keyStorePassphrase,
+            keyPairPassphrase
+        ), distinguishedName, days);
     }
 
-    private boolean keyStoreExists() {
-        return pathToKeyStore != null && Files.exists(Path.of(pathToKeyStore));
+    /**
+     * Loads the key by using the provided certificateStorage.
+     * If no key is found, a new key is created.
+     *
+     * @param certificateStorage Certificate storage used for loading and storing the
+     *     key
+     * @param distinguishedName
+     *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
+     *     usually the DeviceID
+     * @param days
+     *     how many days the certificate should be valid for
+     * @throws CertificateStoreException
+     *     if the certificate storage implementation fails to load the key
+     */
+    public KeyManagement(
+        CertificateStorage certificateStorage,
+        String distinguishedName,
+        int days
+    ) throws CertificateStoreException
+    {
+        addBCProvider();
+
+        Optional<CertificateInfo> storedCert = certificateStorage.readCertificate();
+        if (storedCert.isPresent()) {
+            this.cert = storedCert.get();
+        } else {
+            this.cert = this.createCertificate(
+                createKeyPair(),
+                distinguishedName,
+                days,
+                null
+            );
+            certificateStorage.saveCertificate(this.cert);
+        }
+
+        this.ownSki = generateSki(this.cert.certificate.getPublicKey());
+    }
+
+    private static CertificateStorage createCertificateStorage(
+        String pathToKeyStore,
+        String alias,
+        char[] keyStorePassphrase,
+        char[] keyPairPassphrase
+    ) {
+        Objects.requireNonNull(alias);
+
+        if (pathToKeyStore == null) {
+            return new MemoryCertificateStorage();
+        } else {
+            return new KeyStoreCertificateStorage(
+                pathToKeyStore,
+                alias,
+                keyStorePassphrase,
+                keyPairPassphrase
+            );
+        }
     }
 
     public static SubjectKeyIdentifier generateSki(PublicKey publicKey) {
@@ -266,100 +264,6 @@ public class KeyManagement {
         trustedSkis.clear();
     }
 
-    private void storeCertificate(
-        String alias
-    ) throws
-        IOException,
-        CertificateException,
-        KeyStoreException,
-        NoSuchAlgorithmException,
-        NoSuchProviderException
-    {
-        KeyStore keyStore = loadKeyStore();
-        try {
-            X509Certificate[] certChain = new X509Certificate[] { cert.certificate };
-            keyStore.setKeyEntry(alias, keyPair.getPrivate(), keyPairPass, certChain);
-        }
-        catch (Exception e) {
-            log.error("Exception while storing key pair in key store.", e);
-        }
-
-        if (pathToKeyStore != null) {
-            try (
-                FileOutputStream fos = new FileOutputStream(pathToKeyStore);
-                // try-with-resource unlocks it automatically
-                FileLock ignored = fos.getChannel().lock()
-            ) {
-                keyStore.store(fos, keyStorePass);
-            }
-        }
-    }
-
-    private KeyStore loadKeyStore() throws
-        KeyStoreException,
-        NoSuchProviderException,
-        CertificateException,
-        IOException,
-        NoSuchAlgorithmException
-    {
-        // For reference: https://docs.oracle.com/en/java/javase/11/docs/specs/security/standard-names.html#keystore-types
-        KeyStore result = KeyStore.getInstance("pkcs12", "BC");
-        if (keyStoreExists()) {
-            try (
-                FileInputStream fis = new FileInputStream(pathToKeyStore);
-                FileLock ignored = fis.getChannel().lock(0, Long.MAX_VALUE, true)
-            ) {
-                result.load(fis, keyStorePass);
-            }
-        }
-        else {
-            if (pathToKeyStore != null) {
-                log.info(
-                    "No keystore has been found under path {}. Creating a new one.",
-                    pathToKeyStore
-                );
-            }
-            result.load(null, keyStorePass);
-        }
-        return result;
-    }
-
-    /**
-     * We are not sure what the symmetric key methods are for.
-     * Maybe this logic concerns SHIP 1.1.0.
-     * As they are used nowhere right now, they may change or be removed in the
-     * future.
-     * <p>
-     * TODO: figure this out.
-     */
-    @Deprecated
-    public void storeSymKeyInKeyStore(String alias) throws
-        NoSuchProviderException,
-        KeyStoreException,
-        CertificateException,
-        NoSuchAlgorithmException,
-        IOException
-    {
-        KeyStore specialKeyStore = KeyStore.getInstance("BKS", "BC");
-        if (keyStoreExists()) {
-            specialKeyStore.load(new FileInputStream(pathToKeyStore), keyStorePass);
-        }
-        else {
-            specialKeyStore.load(null, null);
-        }
-        // wrap the symmetric key
-        SecretKeySpec symmetricKey = createSymmetricKey();
-        KeyStore.SecretKeyEntry secret = new KeyStore.SecretKeyEntry(symmetricKey);
-        KeyStore.ProtectionParameter pwd = new KeyStore.PasswordProtection(
-            keyStorePass
-        );
-        specialKeyStore.setEntry(alias, secret, pwd);
-        // save the keystore file
-        try (FileOutputStream fos = new FileOutputStream(pathToKeyStore)) {
-            specialKeyStore.store(fos, keyStorePass);
-        }
-    }
-
     /**
      * Generates an asymmetric ECDHE key pair
      *
@@ -447,7 +351,7 @@ public class KeyManagement {
             certBuilder.addExtension(
                 Extension.subjectKeyIdentifier,
                 false,
-                this.ownSki
+                generateSki(keyPair.getPublic())
             );
 
             // Make the cert builder a cert authority in case more certs are needed

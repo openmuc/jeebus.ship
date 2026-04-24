@@ -14,6 +14,7 @@ import io.netty.handler.ssl.SslContext;
 import org.openmuc.jeebus.ship.api.ClientConnectedCallBack;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
+import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
 import org.openmuc.jeebus.ship.node.service.TxtRecord;
@@ -110,14 +111,7 @@ public class ShipNodeImpl {
                 keyManagement.getOwnSkiAsStr()
             );
         }
-        catch (
-            KeyStoreException |
-            NoSuchProviderException |
-            CertificateException |
-            IOException |
-            NoSuchAlgorithmException |
-            UnrecoverableKeyException e
-        ) {
+        catch (CertificateStoreException e) {
             log.error("Exception while loading or creating key store: ", e);
             throw new RuntimeException(e);
             // if we don't exit here, there would be an NPE later anyway
