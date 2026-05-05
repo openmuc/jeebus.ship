@@ -99,10 +99,7 @@ public class ShipNodeImpl {
 
         try {
             this.keyManagement = new KeyManagement(
-                nodeConfig.getCertPath(),
-                nodeConfig.getAlias(),
-                nodeConfig.getKeyStorePassphrase(),
-                nodeConfig.getKeyPairPassphrase(),
+                nodeConfig.getCertificateStorage(),
                 nodeConfig.getDistinguishedName(),
                 nodeConfig.getCertificateValidityInDays()
             );

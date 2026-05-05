@@ -664,6 +664,10 @@ public class ShipNodeConfiguration {
         return certificateValidityInDays;
     }
 
+    public CertificateStorage getCertificateStorage() {
+        return this.certificateStorage;
+    }
+
     private Optional<KeyStoreCertificateStorage> getKeyStoreCertStore() {
         if (!(this.certificateStorage instanceof KeyStoreCertificateStorage)) {
             return Optional.empty();
