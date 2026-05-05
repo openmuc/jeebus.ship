@@ -397,7 +397,7 @@ public final class ConfigBuilder {
      * @return a copy of this object. The only exception is that passphrases are not
      * copied to the new object.
      */
-    public ConfigBuilder but() {
+    public ConfigBuilder cloneWithoutSecrets() {
         return aShipConfig()
             .withId(id)
             .withServerEnabled(serverEnabled)
