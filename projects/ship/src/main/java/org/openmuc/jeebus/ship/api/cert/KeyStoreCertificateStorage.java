@@ -27,7 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Certificate storage that stores the certificate in java keychain files.
+ * Certificate storage that stores the certificate in java keystore files.
  */
 public class KeyStoreCertificateStorage implements CertificateStorage {
     protected static final Logger log = LoggerFactory.getLogger(KeyStoreCertificateStorage.class);

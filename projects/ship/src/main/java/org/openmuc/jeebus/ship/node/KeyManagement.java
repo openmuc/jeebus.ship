@@ -33,7 +33,6 @@ import org.openmuc.jeebus.ship.node.websocket.SkiManagementInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.cert.CertificateException;
@@ -286,16 +285,6 @@ public class KeyManagement {
             throw new RuntimeException("Exception while generating EC KeyPair", e);
         }
         return gen.generateKeyPair();
-    }
-
-    /**
-     * @see KeyManagement#storeSymKeyInKeyStore
-     */
-    @Deprecated
-    private SecretKeySpec createSymmetricKey() {
-        byte[] keyBytes = new byte[16];
-        new SecureRandom().nextBytes(keyBytes);
-        return new SecretKeySpec(keyBytes, "AES");
     }
 
     /**
