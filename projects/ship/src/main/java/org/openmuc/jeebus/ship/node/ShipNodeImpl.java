@@ -13,6 +13,7 @@ package org.openmuc.jeebus.ship.node;
 import io.netty.handler.ssl.SslContext;
 import org.openmuc.jeebus.ship.api.ClientConnectedCallBack;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
+import org.openmuc.jeebus.ship.api.ShipConnectionInfoSnapshot;
 import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
@@ -462,6 +463,36 @@ public class ShipNodeImpl {
 
     public String getOwnSki() {
         return encodeSkiAsString(keyManagement.getOwnSki());
+    }
+
+    public List<ShipConnectionInfoSnapshot> getConnectionInfos() {
+        List<ShipConnectionInfoSnapshot> infos = new ArrayList<>();
+        synchronized (servers) {
+            for (ShipServer server : servers) {
+                for (ShipServerHandler handler : server.getHandlers()) {
+                    infos.add(this.createConnectionInfoSnapshot(handler, ShipConnectionInfoSnapshot.ConnectionTypeEnum.PEER_CONNECTED_TO_SERVER));
+                }
+            }
+        }
+        synchronized (clients) {
+            for (ShipClient client : clients) {
+                infos.add(this.createConnectionInfoSnapshot(client.getHandler(), ShipConnectionInfoSnapshot.ConnectionTypeEnum.CLIENT_CONNECTION_TO_PEER));
+            }
+        }
+
+        return infos;
+    }
+
+    private ShipConnectionInfoSnapshot createConnectionInfoSnapshot(WebSocketHandler handler, ShipConnectionInfoSnapshot.ConnectionTypeEnum connectionType) {
+        boolean isFullyEstablished = handler.getShipConnection() != null && handler.getShipConnection().getCde() != null;
+        return new ShipConnectionInfoSnapshot(
+                connectionType,
+                handler.getPeerSki(),
+                handler.getRemoteIpAndPort(),
+                handler.getTrustLevel(),
+                isFullyEstablished,
+                handler.getConnectionDate()
+        );
     }
 
 }
