@@ -31,11 +31,6 @@ import javax.jmdns.ServiceInfo;
 import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.net.URI;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -101,6 +96,7 @@ public class ShipNodeImpl {
             this.keyManagement = new KeyManagement(
                 nodeConfig.getCertificateStorage(),
                 nodeConfig.getDistinguishedName(),
+                nodeConfig.getServiceId(),
                 nodeConfig.getCertificateValidityInDays()
             );
             log.info(

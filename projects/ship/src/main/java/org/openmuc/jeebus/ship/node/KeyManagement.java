@@ -116,6 +116,7 @@ public class KeyManagement {
     public KeyManagement(
         CertificateStorage certificateStorage,
         String distinguishedName,
+        String serviceId,
         int days
     ) throws CertificateStoreException
     {
@@ -128,6 +129,7 @@ public class KeyManagement {
             this.cert = this.createCertificate(
                 createKeyPair(),
                 distinguishedName,
+                serviceId,
                 days,
                 null
             );
@@ -313,6 +315,7 @@ public class KeyManagement {
     public CertificateInfo createCertificate(
         KeyPair keyPair,
         String distinguishedName,
+        String serviceId,
         int days,
         CertificateInfo issuer
     ) {
@@ -364,7 +367,7 @@ public class KeyManagement {
             ASN1Encodable[] subjectAlternativeNames = new ASN1Encodable[] {
                 new GeneralName(
                     GeneralName.dNSName,
-                    "IP Address=" + distinguishedName
+                    serviceId
                 )
             };
             certBuilder.addExtension(
