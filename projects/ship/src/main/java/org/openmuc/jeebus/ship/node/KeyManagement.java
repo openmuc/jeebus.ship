@@ -96,7 +96,7 @@ public class KeyManagement {
             alias,
             keyStorePassphrase,
             keyPairPassphrase
-        ), distinguishedName, days);
+        ), distinguishedName, distinguishedName, days);
     }
 
     /**
