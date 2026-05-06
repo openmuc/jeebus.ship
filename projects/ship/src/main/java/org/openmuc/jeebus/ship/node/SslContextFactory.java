@@ -14,6 +14,7 @@ import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import org.openmuc.jeebus.ship.api.cert.CertificateInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

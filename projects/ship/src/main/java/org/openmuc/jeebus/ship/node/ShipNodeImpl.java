@@ -14,6 +14,7 @@ import io.netty.handler.ssl.SslContext;
 import org.openmuc.jeebus.ship.api.ClientConnectedCallBack;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
+import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
 import org.openmuc.jeebus.ship.node.service.TxtRecord;
@@ -30,11 +31,6 @@ import javax.jmdns.ServiceInfo;
 import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.net.URI;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -98,11 +94,9 @@ public class ShipNodeImpl {
 
         try {
             this.keyManagement = new KeyManagement(
-                nodeConfig.getCertPath(),
-                nodeConfig.getAlias(),
-                nodeConfig.getKeyStorePassphrase(),
-                nodeConfig.getKeyPairPassphrase(),
+                nodeConfig.getCertificateStorage(),
                 nodeConfig.getDistinguishedName(),
+                nodeConfig.getServiceId(),
                 nodeConfig.getCertificateValidityInDays()
             );
             log.info(
@@ -110,14 +104,7 @@ public class ShipNodeImpl {
                 keyManagement.getOwnSkiAsStr()
             );
         }
-        catch (
-            KeyStoreException |
-            NoSuchProviderException |
-            CertificateException |
-            IOException |
-            NoSuchAlgorithmException |
-            UnrecoverableKeyException e
-        ) {
+        catch (CertificateStoreException e) {
             log.error("Exception while loading or creating key store: ", e);
             throw new RuntimeException(e);
             // if we don't exit here, there would be an NPE later anyway

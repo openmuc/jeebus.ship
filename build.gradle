@@ -130,7 +130,7 @@ subprojects {
         bnd(
             'Bundle-Name': project.name,
             'Bundle-Vendor': 'Fraunhofer ISE', 'Bundle-SymbolicName': project.group + '.' + project.name,
-            'Export-Package': 'org.openmuc.jeebus.ship.api, org.openmuc.jeebus.ship.shipconnection'
+            'Export-Package': 'org.openmuc.jeebus.ship.api, org.openmuc.jeebus.ship.api.cert, org.openmuc.jeebus.ship.shipconnection'
         )
     }
 
