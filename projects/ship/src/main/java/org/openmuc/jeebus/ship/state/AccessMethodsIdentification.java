@@ -46,12 +46,7 @@ public class AccessMethodsIdentification {
             ) {
                 amrMsg = MessageUtility.preprocessAmrMsg(msg);
                 /* fixme: we should initialize this message with all values correctly
-                 *  according to SHIP:13.4.6.2. For now using a placeholder value
-                 *  as some stacks refuse communication on empty strings.
-                 *
-                 * fixme: We are also setting the mDNS flag to tell partners to look
-                 *  there for our adress. However, we should check whether we
-                 *  actually offer an mDNS-Service. */
+                 *  according to SHIP:13.4.6.2.*/
                 shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
                     ownShipId,
                     new AccessMethodsMsg.DnsSd_mDns(),

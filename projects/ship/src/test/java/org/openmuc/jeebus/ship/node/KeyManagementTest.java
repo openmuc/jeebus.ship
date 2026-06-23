@@ -81,10 +81,10 @@ public class KeyManagementTest {
     private CertificateStorage createKeyStoreCertificateStorage() {
         String pathToKeyStore = tempDir.toString() + File.separator + "keystore.jks";
         return new KeyStoreCertificateStorage(
-                pathToKeyStore,
-                keystoreAlias,
-                keystorePassphrase,
-                keystoreKeyPassphrase
+            pathToKeyStore,
+            keystoreAlias,
+            keystorePassphrase.clone(),
+            keystoreKeyPassphrase.clone()
         );
     }
 

@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-package org.openmuc.jeebus.ship.util;
+package org.openmuc.jeebus.ship.api.cert;
 
 import java.util.Arrays;
 

@@ -27,12 +27,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Certificate storage that stores the certificate in java keystore files.
+ * An implementation of {@link CertificateStorage} that persists certificates and
+ * private keys in a Java KeyStore (PKCS12) file.
  */
 public class KeyStoreCertificateStorage implements CertificateStorage {
     protected static final Logger log = LoggerFactory.getLogger(KeyStoreCertificateStorage.class);
 
-    private final String pathToKeyStore;
+    private final String path;
     private final String alias;
     private final char[] keyStorePassphrase;
     private final char[] keyPairPassphrase;
@@ -41,45 +42,56 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
      * Creates a certificate storage that reads and stores the certificates in a java
      * keystore file.
      *
-     * @param pathToKeyStore
+     * @param path
      *     path where the key store exists or should be created
      * @param alias
      *     the alias for either the existing key pair or for the key pair to be
      *     created
      * @param keyStorePassphrase
-     *     passphrase for the key store
+     *     the passphrase of the whole keystore file
      * @param keyPairPassphrase
      *     passphrase for the key pair to be generated
+     * @implNote IMPORTANT: the given arrays are overwritten and cleared to increase
+     * security.
      */
     public KeyStoreCertificateStorage(
-        String pathToKeyStore,
+        String path,
         String alias,
         char[] keyStorePassphrase,
         char[] keyPairPassphrase
     ) {
-        Objects.requireNonNull(pathToKeyStore);
+        Objects.requireNonNull(path);
         Objects.requireNonNull(alias);
 
-        this.pathToKeyStore = pathToKeyStore;
+        this.path = path;
         this.alias = alias;
-        this.keyStorePassphrase = keyStorePassphrase;
-        this.keyPairPassphrase = keyPairPassphrase;
+        this.keyStorePassphrase = new Secret(keyStorePassphrase).consume();
+        this.keyPairPassphrase = new Secret(keyPairPassphrase).consume();
     }
 
-    public String getPathToKeyStore() {
-        return this.pathToKeyStore;
+    /**
+     * Simply calls
+     * {@link KeyStoreCertificateStorage#KeyStoreCertificateStorage(String, String,
+     * char[], char[])} with the given {@code path, "mycert.cert", "".toCharArray(),
+     * "".toCharArray())}.
+     *
+     * @param path
+     *     path where the key store exists or should be created
+     */
+    public KeyStoreCertificateStorage(String path) {
+        Objects.requireNonNull(path);
+        this.path = path;
+        this.alias = "mycert.cert";
+        this.keyStorePassphrase = "".toCharArray();
+        this.keyPairPassphrase = "".toCharArray();
+    }
+
+    public String getPath() {
+        return this.path;
     }
 
     public String getAlias() {
         return this.alias;
-    }
-
-    public char[] getKeyStorePassphrase() {
-        return this.keyStorePassphrase;
-    }
-
-    public char[] getKeyPairPassphrase() {
-        return this.keyPairPassphrase;
     }
 
     @Override
@@ -112,7 +124,10 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
                 (X509Certificate) certificate
             ));
         } catch (Exception ex) {
-            throw new CertificateStoreException("Failed to load key from keystore " + this.pathToKeyStore, ex);
+            throw new CertificateStoreException(
+                "Failed to load key from keystore " + this.path,
+                ex
+            );
         }
     }
 
@@ -123,11 +138,17 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
         try {
             var keyStore = this.loadOrCreateKeyStore();
 
-            X509Certificate[] certChain = new X509Certificate[] { certificate.certificate };
-            keyStore.setKeyEntry(alias, certificate.privateKey, this.keyPairPassphrase, certChain);
+            X509Certificate[] certChain
+                = new X509Certificate[] { certificate.certificate };
+            keyStore.setKeyEntry(
+                alias,
+                certificate.privateKey,
+                this.keyPairPassphrase,
+                certChain
+            );
 
             try (
-                FileOutputStream fos = new FileOutputStream(this.pathToKeyStore);
+                FileOutputStream fos = new FileOutputStream(this.path);
                 // try-with-resource unlocks it automatically
                 FileLock ignored = fos.getChannel().lock()
             ) {
@@ -141,11 +162,8 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
     @Override
     public String toString() {
         return "KeyStoreCertificateStorage{" +
-            "pathToKeyStore=" + this.pathToKeyStore +
+            "pathToKeyStore=" + this.path +
             ", alias=" + this.alias +
-            // Maybe not output any passwords...
-            // ", keyStorePassphrase=" + Arrays.toString(keyStorePassphrase) +
-            // ", keyPairPassphrase=" + Arrays.toString(keyPairPassphrase) +
             '}';
     }
 
@@ -159,7 +177,7 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
         if (!this.doesKeyStoreExist()) {
             log.info(
                 "No keystore has been found under path {}. Creating a new one.",
-                pathToKeyStore
+                path
             );
             return this.createNewKeyStore();
         }
@@ -168,18 +186,21 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
     }
 
     private boolean doesKeyStoreExist() {
-        return Files.exists(Path.of(this.pathToKeyStore));
+        return Files.exists(Path.of(this.path));
     }
 
     private KeyStore loadKeyStore() throws
-        KeyStoreException, NoSuchProviderException, IOException,
-        CertificateException, NoSuchAlgorithmException
+        KeyStoreException,
+        NoSuchProviderException,
+        IOException,
+        CertificateException,
+        NoSuchAlgorithmException
     {
         // For reference: https://docs.oracle.com/en/java/javase/11/docs/specs/security/standard-names.html#keystore-types
         KeyStore result = KeyStore.getInstance("pkcs12", "BC");
 
         try (
-            FileInputStream fis = new FileInputStream(pathToKeyStore);
+            FileInputStream fis = new FileInputStream(path);
             FileLock ignored = fis.getChannel().lock(0, Long.MAX_VALUE, true)
         ) {
             result.load(fis, this.keyStorePassphrase);
@@ -188,8 +209,11 @@ public class KeyStoreCertificateStorage implements CertificateStorage {
     }
 
     private KeyStore createNewKeyStore() throws
-        KeyStoreException, NoSuchProviderException, CertificateException,
-        IOException, NoSuchAlgorithmException
+        KeyStoreException,
+        NoSuchProviderException,
+        CertificateException,
+        IOException,
+        NoSuchAlgorithmException
     {
         KeyStore result = KeyStore.getInstance("pkcs12", "BC");
         result.load(null, this.keyStorePassphrase);

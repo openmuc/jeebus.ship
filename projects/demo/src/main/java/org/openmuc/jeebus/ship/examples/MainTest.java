@@ -125,13 +125,15 @@ public class MainTest {
         LOGGER.info("Opening connection...");
 
         ShipConnectionInterface shipConnInterface = ship2.openConnection(
-            "127.0.0.1:8080");
+            "127.0.0.1:8080"
+        );
 
         Instant connectionReady = Instant.now();
         LOGGER.info("Connection ready, sending test message...");
 
-        shipConnInterface.sendMsg("{\"msg\":\"example payload\"}".getBytes(
-            StandardCharsets.UTF_8));
+        shipConnInterface.sendMsg(
+            "{\"msg\":\"example payload\"}".getBytes(StandardCharsets.UTF_8)
+        );
 
         byte[] message;
         while ((message = messageReceived.get()) == null) {

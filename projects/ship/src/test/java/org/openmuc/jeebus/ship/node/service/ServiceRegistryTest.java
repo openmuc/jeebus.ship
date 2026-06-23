@@ -82,7 +82,7 @@ class ServiceRegistryTest {
         try (
             serviceReg;
             ServiceRegistry serviceReg2 = new ServiceRegistry(
-                configBuilder.cloneWithoutSecrets().withId(halfId + id2).build(),
+                configBuilder.but().withId(halfId + id2).build(),
                 null
         )) {
             await()
@@ -133,7 +133,7 @@ class ServiceRegistryTest {
         assertThrows(
             IllegalArgumentException.class,
             () -> registry.validateTxt(new ServiceRegistry(
-                config.cloneWithoutSecrets()
+                config.but()
                     .withBrand(finalOptionalStr)
                     .withType(finalOptionalStr)
                     .build(),
@@ -145,7 +145,7 @@ class ServiceRegistryTest {
         assertThrows(
             IllegalArgumentException.class,
             () -> registry.validateTxt(new ServiceRegistry(
-                config.cloneWithoutSecrets()
+                config.but()
                     .withModel(finalOptionalStr)
                     .withType(finalOptionalStr)
                     .build(),
@@ -157,7 +157,7 @@ class ServiceRegistryTest {
         assertThrows(
             IllegalArgumentException.class,
             () -> registry.validateTxt(new ServiceRegistry(
-                config.cloneWithoutSecrets()
+                config.but()
                     .withModel(finalOptionalStr)
                     .withBrand(finalOptionalStr)
                     .build(),

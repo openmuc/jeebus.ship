@@ -11,11 +11,18 @@
 package org.openmuc.jeebus.ship.node;
 
 import org.openmuc.jeebus.ship.api.ConfigBuilder;
-import org.openmuc.jeebus.ship.util.Secret;
+import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 
 import java.net.*;
 import java.util.Set;
 
+/**
+ * Holds the immutable configuration of a SHIP node.
+ * <p>
+ * The configuration is built by {@link ConfigBuilder} and passed to the node's
+ * constructor.
+ * All fields are final; after construction the instance is thread‑safe.</p>
+ */
 public final class ShipConfig {
 
     private final String id;
@@ -31,12 +38,9 @@ public final class ShipConfig {
     private final String type;
     private final String model;
 
-    private final String keyStorePath;
-    private final Secret keyStorePassphrase;
-    private final String certificateAlias;
+    private final CertificateStorage certificateStorage;
     private final int certificateValidity;
     private final String certificateDistinguishedName;
-    private final Secret keyPairPassphrase;
 
     private final String wssPath;
     private final boolean keepAlive;
@@ -52,12 +56,9 @@ public final class ShipConfig {
         String brand,
         String type,
         String model,
-        String keyStorePath,
-        char[] keyStorePassphrase,
-        String certificateAlias,
+        CertificateStorage certificateStorage,
         int certificateValidity,
         String certificateDistinguishedName,
-        char[] keyPairPassphrase,
         String wssPath,
         boolean keepAlive
     ) {
@@ -71,20 +72,26 @@ public final class ShipConfig {
         this.brand = brand;
         this.type = type;
         this.model = model;
-        this.keyStorePath = keyStorePath;
-        this.keyStorePassphrase = new Secret(keyStorePassphrase);
-        this.certificateAlias = certificateAlias;
+        this.certificateStorage = certificateStorage;
         this.certificateValidity = certificateValidity;
         this.certificateDistinguishedName = certificateDistinguishedName;
-        this.keyPairPassphrase = new Secret(keyPairPassphrase);
         this.wssPath = wssPath;
         this.keepAlive = keepAlive;
     }
 
+    /**
+     * Creates a new {@link ConfigBuilder} that can be used to construct a
+     * {@link ShipConfig} instance.
+     *
+     * @return a new {@link ConfigBuilder}
+     */
     public static ConfigBuilder getBuilder() {
         return new ConfigBuilder();
     }
 
+    /**
+     * @return whether keep‑alive is enabled for the server.
+     */
     public boolean isKeepAlive() {
         return keepAlive;
     }
@@ -93,13 +100,8 @@ public final class ShipConfig {
         return wssPath;
     }
 
-    /**
-     * Clears the passphrase after reading it for the first time.
-     *
-     * @return the passphrase for the key pair in the keystore
-     */
-    char[] getKeyPairPassphrase() {
-        return keyPairPassphrase.consume();
+    public CertificateStorage getCertificateStorage() {
+        return certificateStorage;
     }
 
     public String getCertificateDistinguishedName() {
@@ -108,23 +110,6 @@ public final class ShipConfig {
 
     public int getCertificateValidity() {
         return certificateValidity;
-    }
-
-    public String getCertificateAlias() {
-        return certificateAlias;
-    }
-
-    /**
-     * Clears the passphrase after reading for the first time.
-     *
-     * @return the passphrase to the keystore
-     */
-    char[] getKeyStorePassphrase() {
-        return keyStorePassphrase.consume();
-    }
-
-    public String getKeyStorePath() {
-        return keyStorePath;
     }
 
     public String getmDnsDomain() {
@@ -172,8 +157,7 @@ public final class ShipConfig {
         return "ShipConfig{"
             + "id='"
             + id
-            + '\''
-            + ", serverEnabled="
+            + "', serverEnabled="
             + serverEnabled
             + ", serverBindAddresses="
             + serverBindAddresses
@@ -183,36 +167,22 @@ public final class ShipConfig {
             + trustedSkis
             + ", mDnsServiceInstance='"
             + mDnsServiceInstance
-            + '\''
-            + ", mDnsDomain='"
+            + "', mDnsDomain='"
             + mDnsDomain
-            + '\''
-            + ", brand='"
+            + "', brand='"
             + brand
-            + '\''
-            + ", type='"
+            + "', type='"
             + type
-            + '\''
-            + ", model='"
+            + "', model='"
             + model
-            + '\''
-            + ", keyStorePath='"
-            + keyStorePath
-            + '\''
-            + ", certificateAlias='"
-            + certificateAlias
-            + '\''
-            + ", certificateValidity="
+            + "', certificateValidity="
             + certificateValidity
             + ", certificateDistinguishedName='"
             + certificateDistinguishedName
-            + '\''
-            + ", wssPath='"
+            + "', wssPath='"
             + wssPath
-            + '\''
-            + ", keepAlive="
+            + "', keepAlive="
             + keepAlive
             + '}';
     }
-
 }

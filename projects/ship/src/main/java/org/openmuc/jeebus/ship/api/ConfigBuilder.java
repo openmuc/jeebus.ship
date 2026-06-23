@@ -11,8 +11,9 @@
 package org.openmuc.jeebus.ship.api;
 
 import org.bouncycastle.asn1.x500.X500Name;
+import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
+import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
 import org.openmuc.jeebus.ship.node.ShipConfig;
-import org.openmuc.jeebus.ship.util.Secret;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,9 +28,28 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+/**
+ * Builder class for creating new {@link ShipConfig} objects.
+ * <p>
+ * This class provides a fluent API for configuring various aspects of a SHIP node,
+ * including network settings, security parameters, mDNS service discovery, and
+ * device identification. It enforces validation rules and provides sensible defaults
+ * for optional parameters.
+ * <p>
+ * Key configuration areas:
+ * <ul>
+ *     <li>SHIP node identification (ID, brand, type, model)</li>
+ *     <li>Network binding (IPv4/IPv6 addresses and ports)</li>
+ *     <li>Security (keystore, certificates, trusted SKIs)</li>
+ *     <li>mDNS service discovery (service instance, domain)</li>
+ * </ul>
+ * <p>
+ * Use the {@link #build()} method to create a validated configuration after setting
+ * the required parameters.
+ */
 public final class ConfigBuilder {
-    public static final InetSocketAddress IPv4_ANY;
-    public static final InetSocketAddress IPv6_ANY;
+    public static final InetSocketAddress IP_V4_ANY;
+    public static final InetSocketAddress IP_V6_ANY;
 
     private static final Logger LOG = LoggerFactory.getLogger(
         MethodHandles.lookup().lookupClass()
@@ -37,11 +57,11 @@ public final class ConfigBuilder {
 
     static {
         try {
-            IPv4_ANY = new InetSocketAddress(
+            IP_V4_ANY = new InetSocketAddress(
                 Inet4Address.getByAddress(new byte[] { 0, 0, 0, 0 }),
                 0
             );
-            IPv6_ANY = new InetSocketAddress(
+            IP_V6_ANY = new InetSocketAddress(
                 InetAddress.getByName("::"),
                 0
             );
@@ -55,7 +75,7 @@ public final class ConfigBuilder {
     private String id;
 
     private boolean serverEnabled = true;
-    private Set<InetSocketAddress> serverBindAddresses = Set.of(IPv4_ANY);
+    private Set<InetSocketAddress> serverBindAddresses = Set.of(IP_V4_ANY);
     private boolean autoAcceptEnabled = false;
     private Set<String> trustedSkis;
 
@@ -65,12 +85,9 @@ public final class ConfigBuilder {
     private String type = "default";
     private String model = "default";
 
-    private String keyStorePath = null;
-    private Secret keyStorePassphrase = new Secret("".toCharArray());
-    private String certificateAlias = "mycert.cert";
+    private CertificateStorage certificateStorage = new MemoryCertificateStorage();
     private int certificateValidity = 3650;
     private String certificateDistinguishedName;
-    private Secret keyPairPassphrase = new Secret("".toCharArray());
 
     @SuppressWarnings("HardcodedFileSeparator")
     private String wssPath = "/ship/";
@@ -89,7 +106,7 @@ public final class ConfigBuilder {
      * abbreviation of the manufacturer name. Behind the abbreviation, the
      * manufacturer defines a unique identifier.
      * <p>
-     * Example Values: <code>EXAMPLEBRAND-EEB01M3EU-001122334455</code>
+     * Example Values: {@code EXAMPLEBRAND-EEB01M3EU-001122334455}
      * <p>
      * SHALL NOT exceed 63 bytes in size.
      *
@@ -109,9 +126,9 @@ public final class ConfigBuilder {
      * service discovery using mDNS. This includes finding remote SHIP services as
      * well as registering the service of this device.
      * <p>
-     * By default, this is set to <code>0.0.0.0:0</code> to consider all available
+     * By default, this is set to {@code 0.0.0.0:0} to consider all available
      * network interfaces and use ephemeral free ports.
-     * <code>[::]:0</code> does the same.
+     * {@code [::]:0} does the same.
      *
      * @param serverBindAddresses
      *     Socket addresses to bind the SHIP server to. IPv4 and IPv6 addresses are
@@ -143,10 +160,10 @@ public final class ConfigBuilder {
      * This method parses the socket addresses to bind the SHIP server to from the
      * given Strings. IPv6 host addresses must be surrounded by brackets.
      * <p>
-     * Example Values: <code>"localhost:0"</code>;
-     * <code>"127.0.0.1:8080"</code>;
-     * <code>"[1080:0:0:0:8:800:200C:417A]:2001"</code>;
-     * <code>"[1080::8:800:200C:417A]:6060"</code>
+     * Example Values: {@code "localhost:0"};
+     * {@code "127.0.0.1:8080"};
+     * {@code "[1080:0:0:0:8:800:200C:417A]:2001"};
+     * {@code "[1080::8:800:200C:417A]:6060"}
      *
      * @param serverBindAddresses
      *     String representation of the socket address to bind the SHIP server to
@@ -165,7 +182,7 @@ public final class ConfigBuilder {
 
     /**
      * @param serverEnabled
-     *     If <code>true</code> (which is the default), starts a SHIP server with the
+     *     If {@code true} (which is the default), starts a SHIP server with the
      *     new node. According to the SHIP specification, disabling the SHIP server
      *     is only valid in certain scenarios. Please consult the specification to be
      *     sure.
@@ -178,7 +195,7 @@ public final class ConfigBuilder {
 
     /**
      * @param autoAcceptEnabled
-     *     If <code>true</code>, the SHIP server accepts the first incoming
+     *     If {@code true}, the SHIP server accepts the first incoming
      *     connection of another device within two minutes after starting.
      * @return the updated {@link ConfigBuilder}
      * @see "SHIP:12.3.1.1 Auto Accept"
@@ -193,7 +210,7 @@ public final class ConfigBuilder {
      * contain the device type, brand and model. It is unique across the network,
      * automatically suffixing a counter on name conflicts.
      * <p>
-     * Example Values: <code>Dishwasher ExampleCompany EEB01M3EU</code>
+     * Example Values: {@code Dishwasher ExampleCompany EEB01M3EU}
      * <p>
      * SHALL NOT exceed 64 bytes in size.
      *
@@ -212,7 +229,7 @@ public final class ConfigBuilder {
      * @param mDnsDomain
      *     Domain component for mDNS. This SHIP node will register it's mDNS service
      *     in this domain and will only consider other SHIP services within this
-     *     domain. Best leave this set to <code>"local."</code> (which is the
+     *     domain. Best leave this set to {@code "local."} (which is the
      *     default) unless you really know what you are doing.
      * @return the updated {@link ConfigBuilder}
      * @see "7.2 Service Name"
@@ -223,49 +240,21 @@ public final class ConfigBuilder {
     }
 
     /**
-     * @param keyStorePath
-     *     Path to the keystore file. If this file exists, the certificate will be
-     *     loaded from it. Otherwise, a new one (and thus a new SKI) will be
-     *     generated and stored there. If left empty (which is the default), a new
-     *     SKI will be generated on every application start.
+     * @param storage
+     *     this certificate storage is used to save and load key information.
+     *     Defaults to {@link MemoryCertificateStorage}.
      * @return the updated {@link ConfigBuilder}
      */
-    public ConfigBuilder withKeyStorePath(String keyStorePath) {
-        this.keyStorePath = keyStorePath;
-        return this;
-    }
-
-    /**
-     * @param keyStorePassphrase
-     *     the passphrase of the whole keystore file.
-     * @return the updated {@link ConfigBuilder}
-     * @implNote IMPORTANT: the given array is overwritten and cleared to increase
-     * security.
-     * @see ConfigBuilder#withKeyStorePath(String)
-     */
-    public ConfigBuilder withKeyStorePassphrase(char[] keyStorePassphrase) {
-        this.keyStorePassphrase = new Secret(keyStorePassphrase);
-        return this;
-    }
-
-    /**
-     * @param certificateAlias
-     *     the alias for the certificate in the keystore. Defaults to
-     *     <code>"mycert.cert"</code>.
-     * @return the updated {@link ConfigBuilder}
-     * @see ConfigBuilder#withKeyStorePath(String)
-     */
-    public ConfigBuilder withCertificateAlias(String certificateAlias) {
-        this.certificateAlias = certificateAlias;
+    public ConfigBuilder withCertificateStorage(CertificateStorage storage) {
+        this.certificateStorage = storage;
         return this;
     }
 
     /**
      * @param certificateValidity
      *     the number of days the certificate is valid for. Defaults to
-     *     <code>3650</code>.
+     *     {@code 3650}.
      * @return the updated {@link ConfigBuilder}
-     * @see ConfigBuilder#withKeyStorePath(String)
      */
     public ConfigBuilder withCertificateValidity(int certificateValidity) {
         this.certificateValidity = certificateValidity;
@@ -275,9 +264,8 @@ public final class ConfigBuilder {
     /**
      * @param certificateDistinguishedName
      *     the distinguished name in the certificate. Setting the Common Name field
-     *     is mandatory (i.e. <code>"CN=myJeebusDevice"</code>).
+     *     is mandatory (i.e. {@code "CN=myJeebusDevice"}).
      * @return the updated {@link ConfigBuilder}
-     * @see ConfigBuilder#withKeyStorePath(String)
      * @see "RFC 3280; RFC 4514; X.509"
      */
     public ConfigBuilder withCertificateDistinguishedName(
@@ -297,23 +285,10 @@ public final class ConfigBuilder {
     }
 
     /**
-     * @param keyPairPassphrase
-     *     the passphrase for the key pair in the keystore.
-     * @return the updated {@link ConfigBuilder}
-     * @implNote IMPORTANT: the given array is overwritten and cleared to increase
-     * security.
-     * @see ConfigBuilder#withKeyStorePath(String)
-     */
-    public ConfigBuilder withKeyPairPassphrase(char[] keyPairPassphrase) {
-        this.keyPairPassphrase = new Secret(keyPairPassphrase);
-        return this;
-    }
-
-    /**
      * @param wssPath
      *     Websocket path of the SHIP node. Occupies the path field in the mDNS TXT
      *     record. Best leave this set to the default value
-     *     <code>"/ship/"</code> unless you really know what you are doing.
+     *     {@code "/ship/"} unless you really know what you are doing.
      * @return the updated {@link ConfigBuilder}
      * @see "7.3.2 TXT Record"
      */
@@ -328,7 +303,7 @@ public final class ConfigBuilder {
 
     /**
      * @param keepAlive
-     *     If <code>true</code>, Enables Netty socket keep-alive mechanism.
+     *     If {@code true}, Enables Netty socket keep-alive mechanism.
      * @return the updated {@link ConfigBuilder}
      * @see "SHIP:10.4 Connection Keepalive; RFC 1122:4.2.3.6 TCP Keep-Alives"
      */
@@ -340,7 +315,7 @@ public final class ConfigBuilder {
     /**
      * @param brand
      *     The brand of the device. It is announced via the mDNS TXT record. Defaults
-     *     to <code>"jEEBus"</code>.
+     *     to {@code "jEEBus"}.
      * @return the updated {@link ConfigBuilder}
      */
     public ConfigBuilder withBrand(String brand) {
@@ -351,8 +326,8 @@ public final class ConfigBuilder {
     /**
      * @param type
      *     The type of the device. It is announced via the mDNS TXT record. Example
-     *     value: <code>Dishwasher</code> Defaults to
-     *     <code>"default"</code>.
+     *     value: {@code Dishwasher} Defaults to
+     *     {@code "default"}.
      * @return the updated {@link ConfigBuilder}
      */
     public ConfigBuilder withType(String type) {
@@ -363,8 +338,8 @@ public final class ConfigBuilder {
     /**
      * @param model
      *     The model of the device. It is announced via the mDNS TXT record. Example
-     *     value: <code>EEB01M3EU</code> Defaults to
-     *     <code>"default"</code>.
+     *     value: {@code EEB01M3EU} Defaults to
+     *     {@code "default"}.
      * @return the updated {@link ConfigBuilder}
      */
     public ConfigBuilder withModel(String model) {
@@ -394,10 +369,9 @@ public final class ConfigBuilder {
     }
 
     /**
-     * @return a copy of this object. The only exception is that passphrases are not
-     * copied to the new object.
+     * @return a copy of this object.
      */
-    public ConfigBuilder cloneWithoutSecrets() {
+    public ConfigBuilder but() {
         return aShipConfig()
             .withId(id)
             .withServerEnabled(serverEnabled)
@@ -409,8 +383,7 @@ public final class ConfigBuilder {
             .withBrand(brand)
             .withType(type)
             .withModel(model)
-            .withKeyStorePath(keyStorePath)
-            .withCertificateAlias(certificateAlias)
+            .withCertificateStorage(certificateStorage)
             .withCertificateValidity(certificateValidity)
             .withCertificateDistinguishedName(certificateDistinguishedName)
             .withWssPath(wssPath)
@@ -481,12 +454,9 @@ public final class ConfigBuilder {
             brand,
             type,
             model,
-            keyStorePath,
-            keyStorePassphrase.consume(),
-            certificateAlias,
+            certificateStorage,
             certificateValidity,
             certificateDistinguishedName,
-            keyPairPassphrase.consume(),
             wssPath,
             keepAlive
         );
@@ -513,10 +483,13 @@ public final class ConfigBuilder {
         }
     }
 
-    private static Optional<InetSocketAddress> findTheAnyAddress(Set<InetSocketAddress> serverBindAddresses) {
+    private static Optional<InetSocketAddress> findTheAnyAddress(
+        Set<InetSocketAddress> serverBindAddresses
+    ) {
         return serverBindAddresses.stream()
-            .filter(address -> IPv4_ANY.getAddress().equals(address.getAddress())
-                || IPv6_ANY.getAddress().equals(address.getAddress()))
+            .filter(address -> IP_V4_ANY.getAddress()
+                .equals(address.getAddress())
+                || IP_V6_ANY.getAddress().equals(address.getAddress()))
             .findAny();
     }
 

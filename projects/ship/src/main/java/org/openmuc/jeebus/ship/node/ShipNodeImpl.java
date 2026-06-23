@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLException;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -83,11 +82,9 @@ public class ShipNodeImpl {
 
         try {
             this.keyManagement = new KeyManagement(
-                nodeConfig.getKeyStorePath(),
-                nodeConfig.getCertificateAlias(),
-                nodeConfig.getKeyStorePassphrase(),
-                nodeConfig.getKeyPairPassphrase(),
+                nodeConfig.getCertificateStorage(),
                 nodeConfig.getCertificateDistinguishedName(),
+                nodeConfig.getmDnsServiceInstance(),
                 nodeConfig.getCertificateValidity()
             );
             log.info(

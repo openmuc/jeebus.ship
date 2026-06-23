@@ -42,7 +42,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -58,47 +57,6 @@ public class KeyManagement {
     private final SubjectKeyIdentifier ownSki;
 
     /**
-     * Creates a new key store, key pair and certificate and stores it in the
-     * specified path. Should the path already contain a key store with a valid key
-     * pair and certificate, then the key store will be loaded instead.
-     *
-     * @param pathToKeyStore
-     *     path where the key store exists or should be created, a temporary key
-     *     store will be created and will not be stored should the path be
-     *     <code>null</code>
-     * @param alias
-     *     the alias for either the existing key pair or for the key pair to be
-     *     created
-     * @param keyStorePassphrase
-     *     passphrase for the key store
-     * @param keyPairPassphrase
-     *     passphrase for the key pair to be generated
-     * @param distinguishedName
-     *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
-     *     usually the DeviceID
-     * @param days
-     *     how many days the certificate should be valid for
-     * @throws CertificateStoreException
-     *     if the certificate storage implementation fails to load or store the key
-     */
-    public KeyManagement(
-        String pathToKeyStore,
-        String alias,
-        char[] keyStorePassphrase,
-        char[] keyPairPassphrase,
-        String distinguishedName,
-        int days
-    ) throws CertificateStoreException
-    {
-        this(createCertificateStorage(
-            pathToKeyStore,
-            alias,
-            keyStorePassphrase,
-            keyPairPassphrase
-        ), distinguishedName, distinguishedName, days);
-    }
-
-    /**
      * Loads the key by using the provided certificateStorage.
      * If no key is found, a new key is created.
      *
@@ -107,6 +65,9 @@ public class KeyManagement {
      * @param distinguishedName
      *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
      *     usually the DeviceID
+     * @param serviceId
+     *     the service ID of the SHIP node is used as a Subject Alternative Name
+     *     in the certificate
      * @param days
      *     how many days the certificate should be valid for
      * @throws CertificateStoreException
@@ -138,26 +99,6 @@ public class KeyManagement {
         this.ownSki = generateSki(this.cert.certificate.getPublicKey());
     }
 
-    private static CertificateStorage createCertificateStorage(
-        String pathToKeyStore,
-        String alias,
-        char[] keyStorePassphrase,
-        char[] keyPairPassphrase
-    ) {
-        Objects.requireNonNull(alias);
-
-        if (pathToKeyStore == null) {
-            return new MemoryCertificateStorage();
-        } else {
-            return new KeyStoreCertificateStorage(
-                pathToKeyStore,
-                alias,
-                keyStorePassphrase,
-                keyPairPassphrase
-            );
-        }
-    }
-
     public static SubjectKeyIdentifier generateSki(PublicKey publicKey) {
         JcaX509ExtensionUtils utils = null;
         try {
@@ -187,7 +128,7 @@ public class KeyManagement {
      *
      * @param ski
      *     the string to check
-     * @return <code>true</code> if the string only uses hex digits and has a length
+     * @return {@code true} if the string only uses hex digits and has a length
      * of exactly 40
      */
     public static boolean isValidSki(String ski) {
@@ -247,8 +188,8 @@ public class KeyManagement {
      *
      * @param ski
      *     the ski to remove
-     * @return <code>true</code> if the map contained the ski, otherwise
-     * <code>false</code>
+     * @return {@code true} if the map contained the ski, otherwise
+     * {@code false}
      */
     public static boolean removeTrustedSki(String ski) {
         if (ski == null) {
@@ -295,6 +236,9 @@ public class KeyManagement {
      * @param distinguishedName
      *     the X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT
      *     devices, usually the DeviceID
+     * @param serviceId
+     *     the service ID of the SHIP node is used as a Subject Alternative Name
+     *     in the certificate
      * @param days
      *     how many days the Certificate is valid for
      * @param issuer

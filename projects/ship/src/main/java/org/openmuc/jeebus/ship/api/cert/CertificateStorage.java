@@ -12,6 +12,10 @@ package org.openmuc.jeebus.ship.api.cert;
 
 import java.util.Optional;
 
+/**
+ * This interface allows users to implement and use their own certificate storage
+ * with jEEBus.SHIP.
+ */
 public interface CertificateStorage {
     Optional<CertificateInfo> readCertificate() throws CertificateStoreException;
 
