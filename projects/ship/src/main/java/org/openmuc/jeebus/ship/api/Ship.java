@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
@@ -40,6 +42,39 @@ public class Ship implements ShipInterface, AutoCloseable {
     private final NamedThreadFactory namedThreadFactory = new NamedThreadFactory(
         "jEEBus.SHIP State pool thread ");
     private ShipNodeImpl node;
+
+    /**
+     * creates a new node on construction
+     *
+     * @param nodeConfig
+     *     the configuration to be used for the node
+     * @param connHandler
+     *     connection handler
+     */
+    public Ship(ShipNodeConfiguration nodeConfig, ConnectionHandler connHandler) {
+        this(
+            ShipConfig.getBuilder()
+                .withCertificateStorage(nodeConfig.getCertificateStorage())
+                .withCertificateDistinguishedName(nodeConfig.getDistinguishedName())
+                .withCertificateValidity(nodeConfig.getCertificateValidityInDays())
+                .withId(nodeConfig.getServiceId())
+                .withKeepAlive(nodeConfig.isKeepAlive())
+                .withMDnsDomain(nodeConfig.getServiceDomain())
+                .withMDnsServiceInstance(nodeConfig.getServiceInstance())
+                .withServerBindAddresses(nodeConfig
+                    .getIpAddresses()
+                    .stream()
+                    .map(inetAddress -> new InetSocketAddress(
+                        inetAddress,
+                        nodeConfig.getPort()
+                    )).collect(Collectors.toSet())
+                )
+                .withServerEnabled(!nodeConfig.isClientOnly())
+                .withWssPath(nodeConfig.getWssPath())
+                .build(),
+            connHandler
+        );
+    }
 
     /**
      * creates a new node on construction
@@ -58,7 +93,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @return an object representing the connection to the device/server if the
      * connection was successful, else
-     * <code>null</code>
+     * {@code null}
      */
     @Override
     public ShipConnectionInterface openConnection(String ipAddr) {
@@ -191,8 +226,8 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @param ski
      *     the ski to remove
-     * @return <code>true</code> if the ski was removed successfully, otherwise
-     * <code>false</code>, for example because
+     * @return {@code true} if the ski was removed successfully, otherwise
+     * {@code false}, for example because
      * the trusted SKI list did not contain the passed ski
      */
     public boolean removeTrustedSki(String ski) {

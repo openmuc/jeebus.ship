@@ -84,7 +84,7 @@ public class ShipNodeImpl {
             this.keyManagement = new KeyManagement(
                 nodeConfig.getCertificateStorage(),
                 nodeConfig.getCertificateDistinguishedName(),
-                nodeConfig.getmDnsServiceInstance(),
+                nodeConfig.getId(),
                 nodeConfig.getCertificateValidity()
             );
             log.info(

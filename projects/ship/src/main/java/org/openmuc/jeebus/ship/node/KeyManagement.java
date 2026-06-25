@@ -65,8 +65,8 @@ public class KeyManagement {
      * @param distinguishedName
      *     X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT devices,
      *     usually the DeviceID
-     * @param serviceId
-     *     the service ID of the SHIP node is used as a Subject Alternative Name
+     * @param shipId
+     *     the SHIP ID of this node is used as a Subject Alternative Name
      *     in the certificate
      * @param days
      *     how many days the certificate should be valid for
@@ -76,7 +76,7 @@ public class KeyManagement {
     public KeyManagement(
         CertificateStorage certificateStorage,
         String distinguishedName,
-        String serviceId,
+        String shipId,
         int days
     ) throws CertificateStoreException
     {
@@ -89,7 +89,7 @@ public class KeyManagement {
             this.cert = this.createCertificate(
                 createKeyPair(),
                 distinguishedName,
-                serviceId,
+                shipId,
                 days,
                 null
             );
@@ -236,8 +236,8 @@ public class KeyManagement {
      * @param distinguishedName
      *     the X.509 Distinguished Name, eg "CN=Test, L=London, C=GB". For IoT
      *     devices, usually the DeviceID
-     * @param serviceId
-     *     the service ID of the SHIP node is used as a Subject Alternative Name
+     * @param shipId
+     *     the SHIP ID of this node is used as a Subject Alternative Name
      *     in the certificate
      * @param days
      *     how many days the Certificate is valid for
@@ -248,7 +248,7 @@ public class KeyManagement {
     public CertificateInfo createCertificate(
         KeyPair keyPair,
         String distinguishedName,
-        String serviceId,
+        String shipId,
         int days,
         CertificateInfo issuer
     ) {
@@ -300,7 +300,7 @@ public class KeyManagement {
             ASN1Encodable[] subjectAlternativeNames = new ASN1Encodable[] {
                 new GeneralName(
                     GeneralName.dNSName,
-                    serviceId
+                    shipId
                 )
             };
             certBuilder.addExtension(
