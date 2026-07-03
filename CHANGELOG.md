@@ -1,10 +1,17 @@
 # Changelog
 
-## [2.2.1] - 
+## [2.3.0] - 
 
 ### Changed
+
+- Deprecate `ShipNodeConfiguration` to be replaced with a `ConfigBuilder` in 3.0.0.
+- Deprecate several API members for renaming
+- Deprecate ussage of IP-Address in the API
+
 ### Added
 ### Fixed
+
+- Update dependencies to fix vulnerabilities
 
 ## [2.2.0] - 2026-04-08
 

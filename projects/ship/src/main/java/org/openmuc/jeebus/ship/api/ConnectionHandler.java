@@ -44,7 +44,11 @@ public interface ConnectionHandler {
      *     the corresponding ip address of the service that was added
      * @param ski
      *     the ski value of the service/node that was added
+     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
+     * SHIP-internal detail, not part of the API. Furthermore, the SHIP-ID should be
+     * part of this method.
      */
+    @Deprecated(since = "2.3.0")
     void serviceAdded(String ipAddr, String ski);
 
     /**
@@ -52,7 +56,11 @@ public interface ConnectionHandler {
      *
      * @param ipAddr
      *     the corresponding ip address of the service that was removed
+     *
+     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
+     * SHIP-internal detail, not part of the API.
      */
+    @Deprecated(since = "2.3.0")
     void serviceRemoved(String ipAddr);
 
     /**
@@ -62,7 +70,11 @@ public interface ConnectionHandler {
      *
      * @param ipAddr
      *     the IP address of the connected device
+     *
+     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
+     * SHIP-internal detail, not part of the API.
      */
+    @Deprecated(since = "2.3.0")
     void connectionDataExchangeEnabled(String ipAddr);
 
 }

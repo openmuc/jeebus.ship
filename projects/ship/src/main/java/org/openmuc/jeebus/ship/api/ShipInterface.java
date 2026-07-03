@@ -28,7 +28,10 @@ public interface ShipInterface {
      *
      * @param connHandler
      *     connectionHandler to handle all interactions with SHIP peer
+     *
+     * @deprecated since 2.3.0. Will be renamed to {@code setConnectionHandler} in 3.0.0.
      */
+    @Deprecated(since = "2.3.0")
     void setConnHandler(ConnectionHandler connHandler);
 
 }

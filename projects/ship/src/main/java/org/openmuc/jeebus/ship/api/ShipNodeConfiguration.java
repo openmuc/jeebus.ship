@@ -23,8 +23,11 @@ import java.util.stream.Collectors;
 
 /**
  * big POJO that holds all relevant library configuration
+ *
+ * @deprecated since 2.3.0 and scheduled for removal in 3.0.0.
+ * This will be replaced by a new Class called {@code ConfigBuilder}.
  */
-// TODO: remake this class. use builder / default values
+@Deprecated(since = "2.3.0", forRemoval = true)
 public class ShipNodeConfiguration {
 
     private InetAddress ipAddress;

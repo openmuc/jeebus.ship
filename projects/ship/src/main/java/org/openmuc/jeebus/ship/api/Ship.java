@@ -46,7 +46,11 @@ public class Ship implements ShipInterface, AutoCloseable {
      *     the configuration to be used for the node
      * @param connHandler
      *     connection handler
+     *
+     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0.
+     * {@link ShipNodeConfiguration} will be replaced by a new Class called {@code ConfigBuilder}.
      */
+    @Deprecated(since = "2.3.0", forRemoval = true)
     public Ship(ShipNodeConfiguration nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
     }
@@ -230,7 +234,13 @@ public class Ship implements ShipInterface, AutoCloseable {
      * The default value for the window is 60 seconds. If the time
      * window passed without any client connecting, the auto-accept-mode will be
      * turned off.
+     * <p>
+     * @deprecated since 2.3.0. Usage of the auto accept mode is discouraged by the
+     * EEBus Initiative and most stack implementers. Experience has shown even one
+     * device in auto accept mode makes setting up working EEBus networks hard and
+     * unreliable. It may be removed in future SHIP specification versions.
      */
+    @Deprecated(since = "2.3.0")
     public void setAutoAcceptMode() {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
@@ -244,8 +254,12 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @param connection
      *     the connection to request the access methods for
+     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0. This method is
+     * superfluous. It just calls a method on the given object. You can do that on
+     * the object itself...
      */
-    public void requestAccessMethods(ShipConnectionImpl connection) {
+    @Deprecated(since = "2.3.0", forRemoval = true)
+    public void requestAccessMethods(ShipConnection connection) {
         connection.requestAccessMethods();
     }
 
@@ -257,6 +271,15 @@ public class Ship implements ShipInterface, AutoCloseable {
         node.setConnHandler(connHandler);
     }
 
+    /**
+     * @param listener
+     *     will be called when a new remote SHIP client connects to the server of
+     *     this node.
+     *
+     * @deprecated since 2.3.0. Will be renamed to {@code setClientConnectedListener}
+     * in 3.0.0.
+     */
+    @Deprecated(since = "2.3.0")
     public void setClientConnectedCB(ClientConnectedCallBack listener) {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
@@ -268,7 +291,10 @@ public class Ship implements ShipInterface, AutoCloseable {
      * returns an array with all detected services, including own service
      *
      * @return the array with all detected services
+     *
+     * @deprecated since 2.3.0. Will return a Set or Map in the future.
      */
+    @Deprecated(since = "2.3.0")
     public ServiceInfo[] getServices() {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
@@ -282,7 +308,11 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @throws IOException
      *     if service discovery shutdown unsuccessful
+     *
+     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0. Please use
+     * {@link Ship#close()} instead.
      */
+    @Deprecated(since = "2.3.0", forRemoval = true)
     public void shutDown() throws IOException {
         ShipNodeImpl node;
         synchronized (this) {
