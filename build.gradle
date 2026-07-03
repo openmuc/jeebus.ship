@@ -23,7 +23,7 @@ plugins {
     // https://github.com/gradle-dependency-analyze/gradle-dependency-analyze
     id "ca.cutterslade.analyze" version "2.0.0"
     // https://github.com/jk1/Gradle-License-Report
-    id 'com.github.jk1.dependency-license-report' version '2.6'
+    id 'com.github.jk1.dependency-license-report' version '3.1.4'
     // https://github.com/vanniktech/gradle-maven-publish-plugin
     id "com.vanniktech.maven.publish" version "0.35.0"
 }
@@ -73,11 +73,11 @@ subprojects {
     dependencies {
         // These dependencies are exported to consumers, that is to say found on their compile classpath.
         // https://mvnrepository.com/artifact/com.google.code.gson/gson
-        api 'com.google.code.gson:gson:2.13.2'
+        api 'com.google.code.gson:gson:2.14.0'
         // https://mvnrepository.com/artifact/org.jmdns/jmdns
         api 'org.jmdns:jmdns:3.6.3'
 
-        implementation platform("org.bouncycastle:bc-jdk18on-bom:1.83")
+        implementation platform("org.bouncycastle:bc-jdk18on-bom:1.84")
         // https://mvnrepository.com/artifact/org.bouncycastle/bcpkix-jdk18on
         implementation "org.bouncycastle:bcpkix-jdk18on"
         // https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk18on
@@ -85,7 +85,7 @@ subprojects {
 
         // Beware of case-sensitivity >_<
         // https://mvnrepository.com/artifact/io.netty/netty-bom
-        implementation platform("io.netty:netty-bom:4.2.10.Final")
+        implementation platform("io.netty:netty-bom:4.2.15.Final")
 
         // https://mvnrepository.com/artifact/io.netty
         implementation "io.netty:netty-buffer"
@@ -100,7 +100,7 @@ subprojects {
         implementation 'com.google.code.findbugs:jsr305:3.0.2'
 
         // https://mvnrepository.com/artifact/org.slf4j/slf4j-api
-        implementation 'org.slf4j:slf4j-api:2.0.17'
+        implementation 'org.slf4j:slf4j-api:2.0.18'
 
 
         // https://mvnrepository.com/artifact/org.jmock/jmock

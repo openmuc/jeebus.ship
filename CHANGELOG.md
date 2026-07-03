@@ -9,6 +9,9 @@
 - Deprecate ussage of IP-Address in the API
 
 ### Added
+
+- Add `CertificateStorage` interface to allow custom storage implementations
+
 ### Fixed
 
 - Update dependencies to fix vulnerabilities
