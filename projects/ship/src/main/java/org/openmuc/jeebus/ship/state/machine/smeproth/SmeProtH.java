@@ -69,8 +69,8 @@ public class SmeProtH {
     }
 
     /**
-     * Check that the version &lt;major,minor> is &le; to the version
-     * &lt;maxMajor,maxMinor>
+     * Check that the version &lt;major,minor&gt; is &le; to the version
+     * &lt;maxMajor,maxMinor&gt;
      *
      * @param major
      *     queried major version

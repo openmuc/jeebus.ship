@@ -255,7 +255,7 @@ public class ShipNodeConfiguration {
      * constructor additionally takes a path pointing to an existing certificate, and
      * an ipAddress. For example: "certs/keystore.jks" or
      * "C:/User/Test/certs/keystore.jks". If there is no certificate found at the
-     * location, a new certificate will be created in the {@link ShipNode} class at
+     * location, a new certificate will be created in the {@link ShipNodeImpl} class at
      * the location
      *
      * @param ipAddress
@@ -336,7 +336,7 @@ public class ShipNodeConfiguration {
      * constructor additionally takes a path pointing to an existing certificate, and
      * an ipAddress. For example: "certs/keystore.jks" or
      * "C:/User/Test/certs/keystore.jks". If there is no certificate found at the
-     * location, a new certificate will be created in the {@link ShipNodeImpl} class at
+     * location, a new certificate will be created in the {@link ShipNodeImplImpl} class at
      * the location
      *
      * @param ipAddresses
@@ -416,7 +416,7 @@ public class ShipNodeConfiguration {
      * constructor additionally takes a path pointing to an existing certificate and
      * sets the ipAddress to null. For example: "certs/keystore.jks" or
      * "C:/User/Test/certs/keystore.jks". If there is no certificate found at the
-     * location, a new certificate will be created in the {@link ShipNode} class at
+     * location, a new certificate will be created in the {@link ShipNodeImpl} class at
      * the location. Wrapper class for parameters for initial ship node
      * configuration. If a certificate should be loaded or stored, use the other
      * constructor instead

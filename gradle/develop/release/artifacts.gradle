@@ -64,7 +64,7 @@ configure(distributionProjects) {
             }
         }
 
-        if (isReleaseVersion && project.hasProperty("signing.keyId")) {
+        if (project.hasProperty("signing.keyId")) {
             publishToMavenCentral(false)
 
             signAllPublications()
@@ -74,37 +74,7 @@ configure(distributionProjects) {
     publishing {
         repositories {
             // Not a Gitlab CI process ...
-            if (!System.getenv("CI")) {
-                if (!isReleaseVersion) {
-                    maven {
-                        url = cfgSnapshotRepository
-                        name = "GitLab"
-                        authentication {
-                            header(HttpHeaderAuthentication)
-                        }
-                        credentials(HttpHeaderCredentials) {
-                            if ((project.hasProperty('argProjectName')
-                                || project.hasProperty('argGroupName'))
-                            ) {
-                                name = 'Deploy-Token'
-                                value = cfgTokenValue
-                            }
-                            else if (project.hasProperty("gitLabPrivateToken")) {
-                                name = 'Private-Token'
-                                value = gitLabPrivateToken
-                            } else {
-                                logger.warn("Warning in project " + project.name
-                                    + ": It is not a CI environment nor a Private-Token " +
-                                    "(gitLabPrivateToken=<PRIVATE_TOKEN>) in your gradle.properties."
-                                )
-                                return 0
-                            }
-                        }
-                    }
-                }
-            }
-            // Runs in a GitLab CI, set Job Token and publish to GitLab registry
-            else {
+            if (System.getenv("CI")) {
                 maven {
                     url = System.getenv("CI_API_V4_URL") + "/projects/" + cfgGitLabProjectId + "/packages/maven"
                     name = "GitLab"
