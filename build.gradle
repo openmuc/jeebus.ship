@@ -141,27 +141,32 @@ subprojects {
         useJUnitPlatform()
         testLogging.showStandardStreams = true
     }
-}
 
-javadoc {
-    if (JavaVersion.current().isJava9Compatible()) {
-        options.addBooleanOption('html5', true)
+    javadoc {
+        if (JavaVersion.current().isJava9Compatible()) {
+            options.addBooleanOption('html5', true)
+        }
+
+        source distributionProjects.collect {
+            project -> project.sourceSets.main.allJava
+        }
+
+        javadocIncludes.each { include it }
+        javadocExcludes.each { exclude it }
+
+        destinationDir = new File(buildDir, "docs/javadoc-all")
+
+        classpath = files(distributionProjects.collect { project ->
+            project.sourceSets.main.compileClasspath
+        })
+
+        classpath += files(distributionProjects.collect { project ->
+            project.sourceSets.main.output
+        })
+
+        options.tags = [
+            'implNote:a:Implementation Note:',
+            'implSpec:a:Implementation-Requirements'
+        ]
     }
-
-    source distributionProjects.collect {
-        project -> project.sourceSets.main.allJava
-    }
-
-    javadocIncludes.each { include it }
-    javadocExcludes.each { exclude it }
-
-    destinationDir = new File(buildDir, "docs/javadoc-all")
-
-    classpath = files(distributionProjects.collect { project ->
-        project.sourceSets.main.compileClasspath
-    })
-
-    classpath += files(distributionProjects.collect { project ->
-        project.sourceSets.main.output
-    })
 }
