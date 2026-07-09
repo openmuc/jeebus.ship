@@ -15,7 +15,7 @@ import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.smeproth.ProtHError;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeMsg;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.state.machine.SpecifiedTimeout;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
@@ -64,7 +64,7 @@ public class ServerListenProposal implements StateHandler {
         ProtocolHandshakeMsg proposal,
         StateHandlerContext context
     ) {
-        Configuration config = context.getConfig();
+        StaticConfiguration config = context.getConfig();
         HashSet<String> supportedFormats
             = new HashSet<>(config.getSupportedFormats());
         Optional<String> foundFormat = proposal

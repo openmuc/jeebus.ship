@@ -14,7 +14,7 @@ import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.smeproth.ProtHError;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeMsg;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
 import org.openmuc.jeebus.ship.state.machine.StateHandlerContext;
@@ -29,7 +29,7 @@ public class ClientListenChoice implements StateHandler {
 
     @Override
     public void processMessage(byte[] msg, StateHandlerContext context) {
-        Configuration config = context.getConfig();
+        StaticConfiguration config = context.getConfig();
         ProtocolHandshakeMsg choice
             = MessageUtility.preprocessProtHMsg(msg);
         if (!SmeProtH.isValidMsg(ProtocolHandshakeTypeType.SELECT, choice)) {

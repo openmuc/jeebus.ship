@@ -8,6 +8,8 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-dependencies {
-    implementation project(':ship')
+package org.openmuc.jeebus.ship.node.websocket.client;
+
+public interface StopClientListener {
+    void stop();
 }

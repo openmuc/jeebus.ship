@@ -140,7 +140,7 @@ public class TxtRecord {
         props.put("ski", ski);
     }
 
-    public boolean isRegister() {
+    public boolean getRegister() {
         return Boolean.parseBoolean(props.get("register"));
     }
 

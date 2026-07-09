@@ -10,17 +10,14 @@
 
 package org.openmuc.jeebus.ship.util;
 
-import org.junit.jupiter.params.provider.Arguments;
-
 import java.io.IOException;
 import java.net.*;
 import java.util.Enumeration;
 import java.util.Random;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-public class SHIPTestUtil {
+public class ShipTestUtil {
 
     private static final int MIN_PORT_NUMBER = 2000;
     private static final int MAX_PORT_NUMBER = 65535;
@@ -33,16 +30,17 @@ public class SHIPTestUtil {
      * @throws UnknownHostException
      *     if no LAN connection or loopback IP can be found
      */
-    public static InetAddress getLocalHostLANAddress() throws UnknownHostException,
-        SocketException {
+    public static InetAddress getLocalHostLanAddress()
+        throws UnknownHostException, SocketException {
+
         try {
             InetAddress candidateAddress = null;
             for (Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
                  ifaces.hasMoreElements(); ) {
-                NetworkInterface iface = (NetworkInterface) ifaces.nextElement();
+                NetworkInterface iface = ifaces.nextElement();
                 for (Enumeration<InetAddress> inetAddrs = iface.getInetAddresses();
                      inetAddrs.hasMoreElements(); ) {
-                    InetAddress inetAddr = (InetAddress) inetAddrs.nextElement();
+                    InetAddress inetAddr = inetAddrs.nextElement();
                     if (!inetAddr.isLoopbackAddress()) {
                         if (inetAddr.isSiteLocalAddress()) {
                             return inetAddr;
@@ -76,7 +74,7 @@ public class SHIPTestUtil {
      * @param lockedPorts pre-set ports you wish to use in the future, but currently not used.
      * @return free port as int
      */
-    public static int getAvailablePort(int ... lockedPorts) {
+    public static int getAvailablePort(int... lockedPorts) {
         for (int i = 0; i < MAX_TRIES; i++) {
             int port = new Random().nextInt((MAX_PORT_NUMBER - MIN_PORT_NUMBER) + 1)
                 + MIN_PORT_NUMBER;
@@ -95,7 +93,7 @@ public class SHIPTestUtil {
             + " tries");
     }
 
-    private static boolean notPlanedPort(int port, int ... lockedPorts) {
+    private static boolean notPlanedPort(int port, int... lockedPorts) {
          for(int lockedPort:lockedPorts){
              if (lockedPort== port) {
                  return false;

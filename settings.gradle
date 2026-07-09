@@ -13,9 +13,6 @@ rootProject.name = 'ship-root'
 include 'ship'
 project(':ship').projectDir = new File(settingsDir, 'projects/ship')
 
-include 'ship-cli'
-project(':ship-cli').projectDir = new File(settingsDir, 'projects/ship-cli')
-
 include 'demo'
 project(':demo').projectDir = new File(settingsDir, 'projects/demo')
 

@@ -18,7 +18,7 @@ import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.CloseMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
@@ -275,8 +275,8 @@ public class ShipConnectionImpl implements ShipConnection {
         return connection;
     }
 
-    public void setConnection(AuthenticatedConnection basicCB) {
-        this.connection = basicCB;
+    public void setConnection(AuthenticatedConnection basicListener) {
+        this.connection = basicListener;
     }
 
     public int getSelectedMajor() {
@@ -319,7 +319,7 @@ public class ShipConnectionImpl implements ShipConnection {
         return closeHandler.isClosing();
     }
 
-    public Configuration getConfig() {
+    public StaticConfiguration getConfig() {
         return nodeContext.getConfig();
     }
 

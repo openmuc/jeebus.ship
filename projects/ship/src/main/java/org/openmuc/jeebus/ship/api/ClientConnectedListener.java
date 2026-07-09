@@ -7,24 +7,15 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
-package org.openmuc.jeebus.ship.cli;
 
-public class Action {
+package org.openmuc.jeebus.ship.api;
 
-    private final String key;
-    private final String description;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 
-    public Action(String key, String description) {
-        this.key = key;
-        this.description = description;
-    }
-
-    public String getKey() {
-        return key;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
+/**
+ * This listener can be used for the server to set a procedure to run as soon as a
+ * client connects to that server.
+ */
+public interface ClientConnectedListener {
+    void onClientConnected(ShipConnection connection);
 }

@@ -12,6 +12,7 @@ package org.openmuc.jeebus.ship.examples;
 
 import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.message.MessageUtility;
+import org.openmuc.jeebus.ship.node.ShipConfig;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -22,15 +23,6 @@ public class ExampleServer {
     private static Ship ship;
 
     public static void main(String[] args) {
-        char[] passphrase = "yourpassphrase".toCharArray();
-
-        // replaceable with any free port
-        int port = 2001;
-
-        // replaceable with any String starting with '/'
-        String wssPath = "/ship";
-
-        String serviceDomain = "local.";
 
         List<ShipConnectionInterface> serverConnections = new ArrayList<>();
 
@@ -44,7 +36,7 @@ public class ExampleServer {
                  This method can also be used like this to keep track of server
                  connections. Note that adding server connections only works in
                  auto-accept-mode as messages can not be exchanged with
-                 unauthenticated partners. Alternatively use the clientConnectedCB
+                 unauthenticated partners. Alternatively use the clientConnectedListener
                  to authenticate the partner as well.
                 */
                 /*
@@ -61,7 +53,7 @@ public class ExampleServer {
             ) {
                 /*
                  this method can be used like this to keep track of server
-                 connections, alternatively use the clientConnectedCB
+                 connections, alternatively use the clientConnectedListener
                 */
                 serverConnections.remove(shipConn);
             }
@@ -94,19 +86,13 @@ public class ExampleServer {
          keepAlive may be set as desired, but will only minimally influence
          behaviour as of now.
         */
-        ShipNodeConfiguration conf = new ShipNodeConfiguration(
-            port,
-            wssPath,
-            false,
-            "EXAMPLEBRAND-EEB01M3EU-001122334455",
-            serviceDomain,
-            "Dishwasher ExampleCompany EEB01M3EU",
-            "exampleAlias",
-            passphrase,
-            passphrase,
-            "CN=example name1",
-            3650
-        );
+        ShipConfig conf = ShipConfig.getBuilder()
+            .withServerBindAddresses("[::]:0")
+            .withId("EXAMPLEBRAND-EEB01M3EU-001122334455")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M3EU")
+            .withCertificateDistinguishedName("CN=example name1")
+            .withAutoAcceptEnabled(true)
+            .build();
         ship = new Ship(conf, connHandler);
         // auto accept mode will skip verification of public keys
         // ship.setAutoAcceptMode();
@@ -117,16 +103,16 @@ public class ExampleServer {
         // ship.createServer(examplePort, exampleWssPath, false, serviceInfo);
 
         /*
-         set a callback for when a client connects to the server, in this case
+         set a listener for when a client connects to the server, in this case
          connection data preparation will run once a client connects to the server
         */
-        ship.setClientConnectedCB(ship::runConnectionDataPreparation);
+        ship.setClientConnectedListener(ship::runConnectionDataPreparation);
 
         /*
-         you can also configure ClientConnectedCB as follows to authenticate the
+         you can also configure ClientConnectedListener as follows to authenticate the
          partner and  send a message once connection data preparation finishes
         */
-        ship.setClientConnectedCB((connection) -> {
+        ship.setClientConnectedListener((connection) -> {
             ship.addTrustedSki(connection.getRemoteSki());
 
             if (!serverConnections.contains(connection)) {

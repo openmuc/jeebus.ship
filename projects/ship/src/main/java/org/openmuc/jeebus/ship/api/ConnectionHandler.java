@@ -10,6 +10,8 @@
 
 package org.openmuc.jeebus.ship.api;
 
+// TODO: banish IP addresses from the API. Identities should be handled through
+//  SHIP ID + SKI
 public interface ConnectionHandler {
     /**
      * called when a message with payload was received
@@ -47,6 +49,7 @@ public interface ConnectionHandler {
      * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
      * SHIP-internal detail, not part of the API. Furthermore, the SHIP-ID should be
      * part of this method.
+     * TODO: this should include the complete resolved service info.
      */
     @Deprecated(since = "2.3.0")
     void serviceAdded(String ipAddr, String ski);

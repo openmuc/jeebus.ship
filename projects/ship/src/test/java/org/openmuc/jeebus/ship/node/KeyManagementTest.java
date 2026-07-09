@@ -37,9 +37,8 @@ public class KeyManagementTest {
         = "qyeditwsnj3k3l2sw7lt9sjlprahk1j0".toCharArray();
     private final char[] keystoreKeyPassphrase
         = "othj88udf6u7d2jjqmm37ysu5gx6vhei".toCharArray();
-    private final String dn = "CN=Test, L=Freiburg, C=DE";
+    private final String dn = "CN=Test";
     private final String shipId = "Test";
-
     private final int days = 1;
     private final String testSki = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992222";
     private final String testSki2 = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992223";
@@ -82,10 +81,10 @@ public class KeyManagementTest {
     private CertificateStorage createKeyStoreCertificateStorage() {
         String pathToKeyStore = tempDir.toString() + File.separator + "keystore.jks";
         return new KeyStoreCertificateStorage(
-                pathToKeyStore,
-                keystoreAlias,
-                keystorePassphrase,
-                keystoreKeyPassphrase
+            pathToKeyStore,
+            keystoreAlias,
+            keystorePassphrase.clone(),
+            keystoreKeyPassphrase.clone()
         );
     }
 

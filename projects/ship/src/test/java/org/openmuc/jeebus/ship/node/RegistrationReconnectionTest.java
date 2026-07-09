@@ -35,23 +35,23 @@ public class RegistrationReconnectionTest {
     private final String exampleSki = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992222";
 
     private final ShipNodeContext exampleCtx
-        = new ShipNodeContext(new Configuration(), "some-id");
+        = new ShipNodeContext(new StaticConfiguration(), "some-id");
 
     private ShipConnectionImpl exampleConn;
 
     @Mock
-    private AuthenticatedConnection basicCBMock;
+    private AuthenticatedConnection basicListenerMock;
 
     @BeforeEach
     public void setUp() {
-        when(basicCBMock.getPeerSki()).thenReturn(exampleSki);
+        when(basicListenerMock.getPeerSki()).thenReturn(exampleSki);
         KeyManagement.clearTrustedSkis();
         KeyManagement.addTrustedSki(exampleSki, 32);
     }
 
     @Test
     public void test_registration() {
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicCBMock);
+        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicListenerMock);
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
         assertThat(getTrustedSkis().get(exampleSki).isAuthenticated(), is(false));
 
@@ -62,7 +62,7 @@ public class RegistrationReconnectionTest {
     @Test
     public void test_reconnection() {
         KeyManagement.setTrustedSkiAuthenticated(exampleSki);
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicCBMock);
+        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicListenerMock);
         // see issue #61 in gitlab, for now leave the authenticated flag in, in case it is needed in the future
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
 
@@ -78,7 +78,7 @@ public class RegistrationReconnectionTest {
         // allow directly jumping to any state). But this does not make much sense
         // with a global-state KeyManagement anyway.
 
-        // SmeHelloState helloState = new SmeHelloState(exampleConn.getShipConnCB(),
+        // SmeHelloState helloState = new SmeHelloState(exampleConn.getShipConnListener(),
         //     exampleCtx.getConfig(),
         //     exampleCtx.getLogPrefix()
         // );

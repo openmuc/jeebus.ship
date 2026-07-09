@@ -12,7 +12,7 @@ package org.openmuc.jeebus.ship.state.machine.smeproth;
 
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
-import org.openmuc.jeebus.ship.node.Configuration;
+import org.openmuc.jeebus.ship.node.StaticConfiguration;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
 import org.openmuc.jeebus.ship.state.machine.StateHandlerContext;
@@ -29,7 +29,7 @@ public class ClientInit implements StateHandler {
     }
 
     public static byte[] getAnnounceMaxMessage(StateHandlerContext context) {
-        Configuration config = context.getConfig();
+        StaticConfiguration config = context.getConfig();
         return ShipMessageFactory.parseSmeProtHBody(
             ProtocolHandshakeTypeType.ANNOUNCE_MAX,
             config.getMajor(),

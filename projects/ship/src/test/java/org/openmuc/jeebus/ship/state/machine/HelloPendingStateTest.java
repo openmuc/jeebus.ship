@@ -22,7 +22,7 @@ import org.openmuc.jeebus.ship.message.smepin.PinInputPermissionType;
 import org.openmuc.jeebus.ship.message.smepin.PinStateType;
 import org.openmuc.jeebus.ship.state.machine.smehello.SmeExtraData;
 import org.openmuc.jeebus.ship.util.InstrumentedStateMachine;
-import org.openmuc.jeebus.ship.util.SHIPTestUtil;
+import org.openmuc.jeebus.ship.util.ShipTestUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -307,7 +307,7 @@ public class HelloPendingStateTest {
     }
 
     public static Stream<Arguments> messageWithWaitingSetsProlongationRequestTimer_args() {
-        return SHIPTestUtil.streamProduct(
+        return ShipTestUtil.streamProduct(
             () -> Stream.of(false, true),
             () -> Stream.of(ConnectionHelloPhaseType.READY, ConnectionHelloPhaseType.PENDING),
             () -> Stream.of(5, 120)
@@ -353,7 +353,7 @@ public class HelloPendingStateTest {
     }
 
     public static Stream<Arguments> prolongationRequestTimerSendsMessage_args() {
-        return SHIPTestUtil.streamProduct(
+        return ShipTestUtil.streamProduct(
             ()-> Stream.of(false, true),
             ()-> Stream.of(73, -1)
         ).map(Arguments::of);

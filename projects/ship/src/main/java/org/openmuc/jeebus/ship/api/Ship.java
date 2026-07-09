@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.api;
 
 import org.openmuc.jeebus.ship.node.KeyManagement;
+import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
@@ -24,19 +25,22 @@ import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Ship.class);
     private final NamedThreadFactory namedThreadFactory = new NamedThreadFactory(
-        "jSHIP State pool thread ");
+        "jEEBus.SHIP State pool thread ");
     private ShipNodeImpl node;
 
     /**
@@ -46,12 +50,41 @@ public class Ship implements ShipInterface, AutoCloseable {
      *     the configuration to be used for the node
      * @param connHandler
      *     connection handler
-     *
-     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0.
-     * {@link ShipNodeConfiguration} will be replaced by a new Class called {@code ConfigBuilder}.
      */
-    @Deprecated(since = "2.3.0", forRemoval = true)
     public Ship(ShipNodeConfiguration nodeConfig, ConnectionHandler connHandler) {
+        this(
+            ShipConfig.getBuilder()
+                .withCertificateStorage(nodeConfig.getCertificateStorage())
+                .withCertificateDistinguishedName(nodeConfig.getDistinguishedName())
+                .withCertificateValidity(nodeConfig.getCertificateValidityInDays())
+                .withId(nodeConfig.getServiceId())
+                .withKeepAlive(nodeConfig.isKeepAlive())
+                .withMDnsDomain(nodeConfig.getServiceDomain())
+                .withMDnsServiceInstance(nodeConfig.getServiceInstance())
+                .withServerBindAddresses(nodeConfig
+                    .getIpAddresses()
+                    .stream()
+                    .map(inetAddress -> new InetSocketAddress(
+                        inetAddress,
+                        nodeConfig.getPort()
+                    )).collect(Collectors.toSet())
+                )
+                .withServerEnabled(!nodeConfig.isClientOnly())
+                .withWssPath(nodeConfig.getWssPath())
+                .build(),
+            connHandler
+        );
+    }
+
+    /**
+     * creates a new node on construction
+     *
+     * @param nodeConfig
+     *     the configuration to be used for the node
+     * @param connHandler
+     *     connection handler
+     */
+    public Ship(ShipConfig nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
     }
 
@@ -60,7 +93,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @return an object representing the connection to the device/server if the
      * connection was successful, else
-     * <code>null</code>
+     * {@code null}
      */
     @Override
     public ShipConnectionInterface openConnection(String ipAddr) {
@@ -81,8 +114,6 @@ public class Ship implements ShipInterface, AutoCloseable {
             );
             return connApi;
         }
-
-        // ipAddr = ipAddr.substring(0, ipAddr.indexOf(":"));
 
         String uriStr = "wss://" + ipAddr;
         log.info("websocket uri = {}", uriStr);
@@ -195,8 +226,8 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @param ski
      *     the ski to remove
-     * @return <code>true</code> if the ski was removed successfully, otherwise
-     * <code>false</code>, for example because
+     * @return {@code true} if the ski was removed successfully, otherwise
+     * {@code false}, for example because
      * the trusted SKI list did not contain the passed ski
      */
     public boolean removeTrustedSki(String ski) {
@@ -245,22 +276,7 @@ public class Ship implements ShipInterface, AutoCloseable {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
         }
-        node.autoAcceptMode();
-    }
-
-    /**
-     * Requests the access methods for the communication partner of the specified
-     * connection. Can be used for reconnection.
-     *
-     * @param connection
-     *     the connection to request the access methods for
-     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0. This method is
-     * superfluous. It just calls a method on the given object. You can do that on
-     * the object itself...
-     */
-    @Deprecated(since = "2.3.0", forRemoval = true)
-    public void requestAccessMethods(ShipConnection connection) {
-        connection.requestAccessMethods();
+        node.enableAutoAcceptMode();
     }
 
     @Override
@@ -275,12 +291,8 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @param listener
      *     will be called when a new remote SHIP client connects to the server of
      *     this node.
-     *
-     * @deprecated since 2.3.0. Will be renamed to {@code setClientConnectedListener}
-     * in 3.0.0.
      */
-    @Deprecated(since = "2.3.0")
-    public void setClientConnectedCB(ClientConnectedCallBack listener) {
+    public void setClientConnectedListener(ClientConnectedListener listener) {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
         }
@@ -288,14 +300,11 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     /**
-     * returns an array with all detected services, including own service
+     * returns a set with all detected services, including own service
      *
-     * @return the array with all detected services
-     *
-     * @deprecated since 2.3.0. Will return a Set or Map in the future.
+     * @return the set with all detected services
      */
-    @Deprecated(since = "2.3.0")
-    public ServiceInfo[] getServices() {
+    public Set<ServiceInfo> getServices() {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
         }
@@ -307,13 +316,10 @@ public class Ship implements ShipInterface, AutoCloseable {
      * itself
      *
      * @throws IOException
-     *     if service discovery shutdown unsuccessful
-     *
-     * @deprecated since 2.3.0 and scheduled for removal in 3.0.0. Please use
-     * {@link Ship#close()} instead.
+     *     if service discovery close unsuccessful
      */
-    @Deprecated(since = "2.3.0", forRemoval = true)
-    public void shutDown() throws IOException {
+    @Override
+    public void close() throws IOException {
         ShipNodeImpl node;
         synchronized (this) {
             node = this.node;
@@ -323,14 +329,9 @@ public class Ship implements ShipInterface, AutoCloseable {
             log.warn("shutDown() was called after already being shut down");
             return;
         }
-        node.getServiceRegistry().shutdown();
+        node.getServiceRegistry().close();
         node.stopAllClients();
         node.stopAllServers();
         log.info("SHIP was shut down");
-    }
-
-    @Override
-    public void close() throws IOException {
-        shutDown();
     }
 }

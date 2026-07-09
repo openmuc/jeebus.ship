@@ -21,11 +21,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-public class Configuration {
+public class StaticConfiguration {
 
     // trust level for user verified public keys
     public final static int USER_VERIFIED_TRUST_LEVEL = 32;
-    private static final Logger LOGGER = LoggerFactory.getLogger(Configuration.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StaticConfiguration.class);
     private static final int MAJOR_VERSION = 1;
     private static final int MINOR_VERSION = 0;
     // the trust level for auto accept
@@ -35,7 +35,7 @@ public class Configuration {
     // immutable list of supported protocols
     private static final List<String> PROTOCOLS = Collections.singletonList("TLSv1.2");
     // immutable list of supported cipher suites
-    private static final List<String> CIPHERS = Collections.singletonList("TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256");
+    private static final List<String> CIPHERS = Collections.singletonList("TLS_ECDHE_ECDSA_WITH_AES_128_ListenerC_SHA256");
     private static final List<String> WELL_KNOWN_PROTOCOL_ID = Collections.singletonList("ee1.0");
 
 
@@ -71,9 +71,9 @@ public class Configuration {
     int PIN_entry_penalty (6th invalid attempt) = default 90 (60-90)
      */
 
-    public Configuration() {
+    public StaticConfiguration() {
         try (
-            InputStream configFile = Configuration.class
+            InputStream configFile = StaticConfiguration.class
                 .getClassLoader()
                 .getResourceAsStream("config.properties")
         ) {

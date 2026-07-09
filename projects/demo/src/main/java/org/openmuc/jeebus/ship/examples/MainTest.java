@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.examples;
 
 import org.openmuc.jeebus.ship.api.*;
+import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,17 +23,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class MainTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainTest.class);
-
-    private static final char[] passphrase
-        = "1vny1zlo1x8e1vnw1vn61x8g1zlu1vn4".toCharArray();
-
-    private static final int port = 2001;
-
-    private static final int port2 = 2003;
-
-    private static final String wssPath = "/ship";
-
-    private static final String serviceDomain = "local.";
 
     public static void main(String[] args) throws IOException {
         AtomicReference<byte[]> messageReceived = new AtomicReference<>(null);
@@ -110,37 +100,23 @@ public class MainTest {
         Instant begin = Instant.now();
         LOGGER.info("Beginning SHIP setup...");
 
-        ShipNodeConfiguration conf1 = new ShipNodeConfiguration(port,
-            wssPath,
-            false,
-            "EXAMPLEBRAND-EEB01M3EU-001122334455",
-            serviceDomain,
-            "Dishwasher ExampleCompany EEB01M3EU",
-            "exampleAlias",
-            passphrase,
-            passphrase,
-            "CN=example name",
-            365
-        );
+        ShipConfig conf1 = ShipConfig.getBuilder()
+            .withId("EXAMPLEBRAND-EEB01M3EU-001122334455")
+            .withServerBindAddresses("localhost:8080")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M3EU")
+            .withCertificateDistinguishedName("CN=example name")
+            .build();
         Ship ship = new Ship(conf1, connHandler);
-        // ship.setAutoAcceptMode();
 
-        ship.setClientConnectedCB(ship::runConnectionDataPreparation);
+        ship.setClientConnectedListener(ship::runConnectionDataPreparation);
 
-        ShipNodeConfiguration conf2 = new ShipNodeConfiguration(port2,
-            wssPath,
-            false,
-            "EXAMPLEBRAND-EEB01M3EU-001122334456",
-            serviceDomain,
-            "Dishwasher ExampleCompany EEB01M4EU",
-            "exampleAlias",
-            passphrase,
-            passphrase,
-            "CN=example name2",
-            365
-        );
+        ShipConfig conf2 = ShipConfig.getBuilder()
+            .withId("EXAMPLEBRAND-EEB01M3EU-001122334456")
+            .withServerBindAddresses("localhost:8081")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU")
+            .withCertificateDistinguishedName("CN=example name2")
+            .build();
         Ship ship2 = new Ship(conf2, connHandler2);
-        // ship2.setAutoAcceptMode();
 
         ship.addTrustedSki(ship2.getOwnSki());
         ship2.addTrustedSki(ship.getOwnSki());
@@ -149,13 +125,15 @@ public class MainTest {
         LOGGER.info("Opening connection...");
 
         ShipConnectionInterface shipConnInterface = ship2.openConnection(
-            "127.0.0.1:2001");
+            "127.0.0.1:8080"
+        );
 
         Instant connectionReady = Instant.now();
         LOGGER.info("Connection ready, sending test message...");
 
-        shipConnInterface.sendMsg("{\"msg\":\"example payload\"}".getBytes(
-            StandardCharsets.UTF_8));
+        shipConnInterface.sendMsg(
+            "{\"msg\":\"example payload\"}".getBytes(StandardCharsets.UTF_8)
+        );
 
         byte[] message;
         while ((message = messageReceived.get()) == null) {
@@ -172,10 +150,10 @@ public class MainTest {
             new String(message, StandardCharsets.UTF_8)
         );
 
-        ship.shutDown();
-        ship2.shutDown();
+        ship.close();
+        ship2.close();
 
-        LOGGER.info("SHIP shutdown complete, timings:"
+        LOGGER.info("SHIP close complete, timings:"
             + "\n\t- SHIP setup: {}"
             + "\n\t- Opening connection: {}"
             + "\n\t- Transmitting message: {}"

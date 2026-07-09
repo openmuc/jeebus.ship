@@ -12,25 +12,28 @@ package org.openmuc.jeebus.ship.node.websocket.server;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.concurrent.GlobalEventExecutor;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
+import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.net.InetSocketAddress;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 public class ShipServer {
     protected static final Logger log = LoggerFactory.getLogger(ShipServer.class);
     private final SslContext sslContext;
-    private final int port;
     private final String wssPath;
     private final boolean keepAlive;
     private final String logPrefix;
@@ -39,19 +42,22 @@ public class ShipServer {
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    private ChannelFuture bootstrapFuture;
 
     private final ShipNodeContext nodeContext;
     private final ShipNodeImpl shipNode;
 
+    private Set<InetSocketAddress> boundSocketAddresses;
+    private ChannelGroup serverChannels;
+
     public ShipServer(
         SslContext sslContext,
-        int port,
+        Set<InetSocketAddress> bindAddresses,
         String wssPath,
         ShipNodeContext nodeContext,
         ShipNodeImpl shipNode,
         boolean keepAlive
     ) throws InterruptedException {
+
         this.sslContext = sslContext;
 
         this.wssPath = wssPath;
@@ -61,17 +67,22 @@ public class ShipServer {
         this.nodeContext = nodeContext;
         this.shipNode = shipNode;
 
-        this.port = port;
-        this.nodeContext.setLogPrefix("SHIP server (port " + this.port + ")");
+        // TODO
+        this.nodeContext.setLogPrefix(
+            "SHIP server (" + nodeContext.getOwnShipId() + ")"
+        );
         // the logPrefix will be changed in the serverHandler later so the initial
         // prefix needs to be saved for logging
         logPrefix = this.nodeContext.getLogPrefix();
 
-        this.start();
+        this.start(bindAddresses);
     }
 
-    private synchronized void start() throws InterruptedException {
-        log.info("{} started", logPrefix);
+    private synchronized void start(
+        Set<InetSocketAddress> bindAddresses
+    ) {
+
+        log.info("starting {}", logPrefix);
 
         IoHandlerFactory ioHandlerFactory = NioIoHandler.newFactory();
         bossGroup = new MultiThreadIoEventLoopGroup(1, ioHandlerFactory);
@@ -82,7 +93,44 @@ public class ShipServer {
             .childHandler(new ShipServerInitializer(sslContext, nodeContext, this))
             .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
-        bootstrapFuture = bootstrap.bind(port).sync();
+        serverChannels = new DefaultChannelGroup(
+            GlobalEventExecutor.INSTANCE);
+
+        bindAddresses
+            .stream()
+            .map(bootstrap::bind)
+            .map(ShipServer::wrapInRuntimeException)
+            .map(ChannelFuture::channel)
+            .forEach(serverChannels::add);
+
+        boundSocketAddresses = serverChannels.stream()
+            .map(Channel::localAddress)
+            .map(InetSocketAddress.class::cast)
+            .collect(Collectors.toSet());
+
+        log.info(
+            "bound addresses for {}:\n\t{}",
+            logPrefix,
+            boundSocketAddresses.stream()
+                .map(ShipUtilities::beautify)
+                .collect(Collectors.joining("\n\t"))
+        );
+    }
+
+    private static ChannelFuture wrapInRuntimeException(ChannelFuture toSync) {
+        try {
+            return toSync.sync();
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * @return a copy of all local bound socket addresses of this server
+     */
+    public Set<InetSocketAddress> getBoundSocketAddresses() {
+        return boundSocketAddresses;
     }
 
     public synchronized void stop() {
@@ -96,12 +144,11 @@ public class ShipServer {
             handler.getChannel().close();
         }));
         try {
-            bootstrapFuture.channel().close().sync();
+            serverChannels.close().sync();
 
             // syncing graceful netty shutdowns apparently creates deadlocks
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
-            bootstrapFuture.channel().closeFuture().sync();
             shipNode.removeServer(this);
         }
         catch (InterruptedException e) {
@@ -121,10 +168,6 @@ public class ShipServer {
         }
     }
 
-    public int getPort() {
-        return port;
-    }
-
     public void setConnHandler(ConnectionHandler connHandler) {
         nodeContext.setConnHandler(connHandler);
     }
@@ -133,7 +176,7 @@ public class ShipServer {
         handlers.add(handler);
         ExecutorService exec = Executors.newSingleThreadExecutor();
         exec.execute(() -> {
-                    if (shipNode.getClientConnectedListener() != null) {
+            if (shipNode.getClientConnectedListener() != null) {
                 try {
                     if (!handler.isShipConnRdy(5)) {
                         throw new IllegalStateException(
@@ -144,12 +187,12 @@ public class ShipServer {
                     log.error(e.getMessage());
                     Thread.currentThread().interrupt();
                 }
-                        shipNode
+                shipNode
                     .getClientConnectedListener()
-                            .onClientConnected(handler.getShipConnection());
+                    .onClientConnected(handler.getShipConnection());
             }
             else {
-                log.warn("{}: ClientConnectedCallBack not set", logPrefix);
+                log.warn("{}: ClientConnectedListener not set", logPrefix);
             }
         });
         exec.shutdown();
@@ -163,7 +206,7 @@ public class ShipServer {
         return wssPath;
     }
 
-    public ShipNodeImpl getSocketCB() {
+    public ShipNodeImpl getSocketListener() {
         return shipNode;
     }
 }

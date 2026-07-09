@@ -23,11 +23,7 @@ import java.util.stream.Collectors;
 
 /**
  * big POJO that holds all relevant library configuration
- *
- * @deprecated since 2.3.0 and scheduled for removal in 3.0.0.
- * This will be replaced by a new Class called {@code ConfigBuilder}.
  */
-@Deprecated(since = "2.3.0", forRemoval = true)
 public class ShipNodeConfiguration {
 
     private InetAddress ipAddress;
@@ -638,24 +634,6 @@ public class ShipNodeConfiguration {
     public String getAlias() {
         return this.getKeyStoreCertStore()
             .map(KeyStoreCertificateStorage::getAlias)
-            .orElse(null);
-    }
-
-    public String getCertPath() {
-        return this.getKeyStoreCertStore()
-            .map(KeyStoreCertificateStorage::getPathToKeyStore)
-            .orElse(null);
-    }
-
-    public char[] getKeyStorePassphrase() {
-        return this.getKeyStoreCertStore()
-            .map(KeyStoreCertificateStorage::getKeyStorePassphrase)
-            .orElse(null);
-    }
-
-    public char[] getKeyPairPassphrase() {
-        return this.getKeyStoreCertStore()
-            .map(KeyStoreCertificateStorage::getKeyPairPassphrase)
             .orElse(null);
     }
 
