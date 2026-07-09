@@ -247,7 +247,7 @@ public class ShipConnectionImpl implements ShipConnection {
     /**
      * Set the communication partner to be trusted, allowing communication to proceed.
      * <p>
-     * This is only allowed if the trust level for this connection is &geq;8.
+     * This is only allowed if the trust level for this connection is &ge;8.
      */
     public void trustCommPartner() {
         // minimum trust level for communication is 8 (auto accepted connections)

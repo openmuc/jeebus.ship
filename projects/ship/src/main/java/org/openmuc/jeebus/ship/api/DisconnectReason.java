@@ -12,6 +12,10 @@ package org.openmuc.jeebus.ship.api;
 
 public enum DisconnectReason {
     REGULAR_END,
+    /**
+     * @deprecated since 2.3.0 and will be renamed to DOUBLE_CONNECTION in 3.0.0.
+     */
+    @Deprecated(since = "2.3.0",forRemoval = true)
     DUPLICATE_CONN,
     ERROR
 }
