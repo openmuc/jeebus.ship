@@ -27,7 +27,7 @@ project.ext {
     cfgPomLicenseName = "Eclipse Public License 2.0"
     cfgPomLicenseUrl = "https://www.eclipse.org/legal/epl-2.0"
 
-    cfgPomScmUrl = "https://www.openmuc.org/eebus/ship/download/"
+    cfgPomScmUrl = "https://github.com/openmuc/jeebus.ship.git"
 
     cfgSnapshotPattern = ~/\d+\.\d+\.\d+.*SNAPSHOT.*/
 
