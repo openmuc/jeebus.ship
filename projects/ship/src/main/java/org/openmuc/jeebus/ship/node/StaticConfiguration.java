@@ -35,7 +35,7 @@ public class StaticConfiguration {
     // immutable list of supported protocols
     private static final List<String> PROTOCOLS = Collections.singletonList("TLSv1.2");
     // immutable list of supported cipher suites
-    private static final List<String> CIPHERS = Collections.singletonList("TLS_ECDHE_ECDSA_WITH_AES_128_ListenerC_SHA256");
+    private static final List<String> CIPHERS = Collections.singletonList("TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256");
     private static final List<String> WELL_KNOWN_PROTOCOL_ID = Collections.singletonList("ee1.0");
 
 
