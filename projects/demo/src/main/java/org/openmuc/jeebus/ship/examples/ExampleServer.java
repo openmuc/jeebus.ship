@@ -91,7 +91,7 @@ public class ExampleServer {
             .withId("EXAMPLEBRAND-EEB01M3EU-001122334455")
             .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M3EU")
             .withCertificateDistinguishedName("CN=example name1")
-            .withAutoAcceptEnabled(true)
+            .withAutoAcceptEnabled(false)
             .build();
         ship = new Ship(conf, connHandler);
         // auto accept mode will skip verification of public keys

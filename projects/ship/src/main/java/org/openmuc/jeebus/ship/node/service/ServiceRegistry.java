@@ -23,8 +23,10 @@ import javax.jmdns.ServiceListener;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class ServiceRegistry implements ServiceListener, AutoCloseable {
@@ -35,7 +37,16 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
      * The JmDNS instances for this service registry. There will be one such instance
      * for every network interface where the SHIP node publishes its service.
      */
-    private final Set<JmDNS> jmDnsSet;
+
+    /*private final Set<JmDNS> jmDnsSet;*/
+    private final Map<InetAddress, JmDNS> addressJmDNSMap = new ConcurrentHashMap<>();
+
+    private final ScheduledExecutorService interfaceScanner =
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "mdns-interface-scanner");
+            t.setDaemon(true);
+            return t;
+        });
 
     private final String serviceType;
 
@@ -49,6 +60,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private TxtRecord ownTxt;
     private Set<InetSocketAddress> boundSocketAddresses;
+
+    private static final long SCAN_INTERVAL_SEC = 10;
 
     /**
      * creates a JmDNS instances and a service listener
@@ -77,18 +90,36 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
         this.connHandler = connHandler;
 
-        jmDnsSet = config.getServerBindAddresses()
+        /*config.getServerBindAddresses()
             .stream()
             .map(InetSocketAddress::getAddress)
             .map(this::safelyInitiateService)
             .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
+            .collect(Collectors.toSet());*/
+
+        config.getServerBindAddresses()
+            .stream()
+            .map(InetSocketAddress::getAddress)
+            .forEach(this::initiateServiceFor);
+
+        // continuously watch for new network interfaces
+        interfaceScanner.scheduleWithFixedDelay(
+            this::scanForNewInterfaces,
+            SCAN_INTERVAL_SEC,
+            SCAN_INTERVAL_SEC,
+            TimeUnit.SECONDS
+        );
+    }
+
+    private JmDNS initiateServiceFor(InetAddress address) {
+        return addressJmDNSMap.computeIfAbsent(address, this::safelyInitiateService);
     }
 
     private JmDNS safelyInitiateService(InetAddress address) {
         try {
             JmDNS jmdns = JmDNS.create(address, hostname);
             jmdns.addServiceListener(serviceType, this);
+            log.info("mDNS service initiated for new address {}", address);
             return jmdns;
         }
         catch (IOException e) {
@@ -100,6 +131,86 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 e
             );
             return null;
+        }
+    }
+
+    private void scanForNewInterfaces() {
+        try {
+            Set<InetAddress> liveAddresses = currentInterfaceAddresses();
+
+            // add JmDNS for addresses we don't have yet
+            for (InetAddress address : liveAddresses) {
+                if (!addressJmDNSMap.containsKey(address)) {
+                    JmDNS jmdns = initiateServiceFor(address);
+                    if (jmdns != null) {
+                        registerOnNewInterface(address);
+                    }
+                }
+            }
+
+            // OPTIONAL: remove JmDNS for addresses that disappeared
+            removeStaleInterfaces(liveAddresses);
+        }
+        catch (Exception e) {
+            log.warn("Error while scanning for new network interfaces", e);
+        }
+    }
+
+    private Set<InetAddress> currentInterfaceAddresses() throws SocketException {
+        Set<InetAddress> result = new HashSet<>();
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface networkInterface = interfaces.nextElement();
+            if (networkInterface.isUp() && !networkInterface.isLoopback()) {
+                result.addAll(Collections.list(networkInterface.getInetAddresses()));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * When a new interface comes up, register the service on it using the same port
+     * we used for the already-bound addresses (if any).
+     */
+    private void registerOnNewInterface(InetAddress newAddress) {
+        if (ownTxt == null || boundSocketAddresses == null
+            || boundSocketAddresses.isEmpty()) {
+            // we haven't been asked to register a service yet
+            return;
+        }
+
+        // reuse the port of an existing bound address
+        int port = boundSocketAddresses.iterator().next().getPort();
+        InetSocketAddress newSocketAddress = new InetSocketAddress(newAddress, port);
+
+        InetSocketAddress registered = registerService(newSocketAddress);
+        if (registered != null) {
+            boundSocketAddresses.add(registered);
+            log.info("Registered mDNS service on newly available interface {}",
+                newSocketAddress);
+        }
+    }
+
+    private void removeStaleInterfaces(Set<InetAddress> liveAddresses) {
+        for (InetAddress address : new HashSet<>(addressJmDNSMap.keySet())) {
+            if (!liveAddresses.contains(address)) {
+                JmDNS jmdns = addressJmDNSMap.remove(address);
+
+                if (jmdns != null) {
+                    log.info("Interface {} disappeared, closing its JmDNS", address);
+                    try (jmdns) {
+                        jmdns.unregisterAllServices();
+                        jmdns.removeServiceListener(serviceType, this);
+                    }
+                    catch (IOException e) {
+                        log.warn("Error closing JmDNS for {}", address, e);
+                    }
+                    if (boundSocketAddresses != null) {
+                        boundSocketAddresses.removeIf(
+                            sa -> Objects.equals(sa.getAddress(), address));
+                    }
+                }
+            }
         }
     }
 
@@ -128,7 +239,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
      * @return identified services
      */
     public Set<ServiceInfo> listServices() {
-        return jmDnsSet
+        return addressJmDNSMap.values()
             .stream()
             .flatMap(j -> Arrays.stream(j.list(serviceType)))
             .collect(Collectors.toSet());
@@ -190,32 +301,26 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     }
 
     private InetSocketAddress registerService(InetSocketAddress socketAddress) {
-        Optional<JmDNS> boundJmDns = jmDnsSet.stream()
-            .filter(jmDNS -> Objects.equals(
-                safelyGetInetAddress(jmDNS),
-                socketAddress.getAddress()
-            ))
-            .findAny();
-
-        if (boundJmDns.isPresent()) {
-            try {
-                boundJmDns.get().registerService(
-                    createServiceInfo(socketAddress.getPort(), ownTxt)
-                );
-                return socketAddress;
-            }
-            catch (IOException e) {
-                log.warn(
-                    "There was an exception while registering an mDNS service."
-                        + " Skipping address {}",
-                    socketAddress,
-                    e
-                );
-                return null;
-            }
-        }
-        else {
+        JmDNS boundJmDns = addressJmDNSMap.get(socketAddress.getAddress());
+        if (boundJmDns == null) {
             return null;
+        }
+        try {
+            boundJmDns.registerService(
+                createServiceInfo(socketAddress.getPort(), ownTxt)
+            );
+            return socketAddress;
+        }
+        catch (IOException e) {
+            log.warn("There was an exception while registering an mDNS service."
+                + " Skipping address {}", socketAddress, e);
+            return null;
+        }
+    }
+
+    private void unregisterAllServices() {
+        for (JmDNS jmdns : addressJmDNSMap.values()) {
+            jmdns.unregisterAllServices();
         }
     }
 
@@ -225,12 +330,6 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         }
         catch (IOException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    private void unregisterAllServices() {
-        for (JmDNS jmdns : jmDnsSet) {
-            jmdns.unregisterAllServices();
         }
     }
 
@@ -252,8 +351,10 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     @Override
     public void close() throws IOException {
         log.info("shutting down mDNS service registry");
+        interfaceScanner.shutdownNow();   // stop the scanner first
+
         CompletableFuture.allOf(
-            jmDnsSet.stream()
+            addressJmDNSMap.values().stream()
                 .map(jmdns -> CompletableFuture.runAsync(() -> {
                     try (jmdns) {
                         log.debug("shutting down JmDNS for {}", jmdns.getInetAddress());
@@ -264,6 +365,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                     }
                 })).toArray(CompletableFuture[]::new)
         ).join();
+
+        addressJmDNSMap.clear();
     }
 
     @Override
