@@ -90,13 +90,6 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
         this.connHandler = connHandler;
 
-        /*config.getServerBindAddresses()
-            .stream()
-            .map(InetSocketAddress::getAddress)
-            .map(this::safelyInitiateService)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());*/
-
         config.getServerBindAddresses()
             .stream()
             .map(InetSocketAddress::getAddress)
