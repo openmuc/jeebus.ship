@@ -156,7 +156,8 @@ public class ShipService {
             .stream(serviceInfo.getInet4Addresses())
             .findFirst();
 
-        return first.map(inet4Address -> new InetSocketAddress(
+        return first
+            .map(inet4Address -> new InetSocketAddress(
                 inet4Address,
                 serviceInfo.getPort()
             ))
@@ -176,33 +177,51 @@ public class ShipService {
             .stream(serviceInfo.getInet6Addresses())
             .findFirst();
 
-        return first.map(inet6Address -> new InetSocketAddress(
+        return first
+            .map(inet6Address -> new InetSocketAddress(
                 inet6Address,
                 serviceInfo.getPort()
             ))
             .orElse(null);
     }
 
-
-    public URI getInet4Uri() throws URISyntaxException {
-
+    /**
+     * @param socketAddress
+     *     the socket address to format as a valid SHIP server URI.
+     * @return a valid URI for the SHIP server from the given socket address
+     * @throws URISyntaxException
+     *     if a valid URI cannot be constructed from the information in this SHIP
+     *     service and the given socket address.
+     */
+    public URI toUri(InetSocketAddress socketAddress) throws URISyntaxException {
         String path = fixPath();
 
-        return new URI(WSS_PREFIX+getInet4SocketAddress()+path);
+        return new URI(WSS_PREFIX + socketAddress + path);
     }
 
+    /**
+     * simply calls {@link ShipService#toUri(InetSocketAddress)} with
+     * {@link ShipService#getInet4SocketAddress()}
+     */
+    public URI getInet4Uri() throws URISyntaxException {
+        return toUri(getInet4SocketAddress());
+    }
+
+    /**
+     * simply calls {@link ShipService#toUri(InetSocketAddress)} with
+     * {@link ShipService#getInet6SocketAddress()}
+     */
     public URI getInet6Uri() throws URISyntaxException {
-
-        String path = fixPath();
-
-        return new URI(WSS_PREFIX+getInet6SocketAddress()+path);
+        return toUri(getInet6SocketAddress());
     }
 
     private String safelyReadRecord(String record) {
         String content = serviceInfo.getPropertyString(record);
         if (content == null) {
-            throw new IllegalStateException(
-                "TXT record '" + record + "' is null for device " + getInstance());
+            throw new IllegalStateException("TXT record '"
+                + record
+                + "' is null for device "
+                + getInstance());
         }
         return content;
     }
@@ -222,12 +241,16 @@ public class ShipService {
     @Override
     public String toString() {
         String delimiter = "\n\t";
-        return serviceInfo.getQualifiedName() + ":" + delimiter
-            + "addesses: " + getSocketAddresses()
+        return serviceInfo.getQualifiedName()
+            + ":"
+            + delimiter
+            + "addesses: "
+            + getSocketAddresses()
             .stream()
             .map(ShipUtilities::beautify)
             .collect(Collectors.joining("; "))
-            + Collections.list(serviceInfo.getPropertyNames())
+            + Collections
+            .list(serviceInfo.getPropertyNames())
             .stream()
             .map(prop -> prop + ": " + serviceInfo.getPropertyString(prop))
             .collect(Collectors.joining(delimiter, delimiter, ""));

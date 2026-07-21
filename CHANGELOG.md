@@ -5,8 +5,13 @@
 ### Changed
 
 - Overhaul API
-   - introduce fluent builders
-   - introduce reasonable default configuration
+  - Introduce new configuration system:
+    - Builder pattern with fluent methods
+    - Reasonable default values
+    - Value validation
+    - Immutable config object
+  - Introduce ShipService class to represent SHIP mDNS Services
+  - Change Ship#openConnection to use URI objects instead of Strings
 
 ### Added
 
