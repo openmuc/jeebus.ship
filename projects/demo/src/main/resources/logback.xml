@@ -93,7 +93,7 @@
     <logger name="ch.qos.logback" level="WARN"/>
     <logger name="com.fasterxml.jackson" level="WARN"/>
     <!--jmDNS may spam our logs with lengthy, internal, benign exception warnings-->
-    <logger name="javax.jmdns" level="INFO"/>
+    <logger name="javax.jmdns" level="ERROR"/>
     <logger name="io.netty" level="INFO"/>
     <logger name="org.openmuc.jeebus" level="INFO"/>
 
@@ -103,5 +103,5 @@
     <!-- Set to DEBUG to enable logging of all messages transmitted with SHIP -->
     <logger name="org.openmuc.jeebus.ship.shipconnection" level="INFO"/>
     <!-- Set to DEBUG to log discovered SHIP mDNS services -->
-    <logger name="org.openmuc.jeebus.ship.node.service" level="TRACE"/>
+    <logger name="org.openmuc.jeebus.ship.node.service" level="DEBUG"/>
 </configuration>
