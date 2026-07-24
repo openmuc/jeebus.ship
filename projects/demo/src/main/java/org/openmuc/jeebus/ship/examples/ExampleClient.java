@@ -16,7 +16,7 @@ import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 
 import java.io.IOException;
-import java.net.URI;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 
 public class ExampleClient {
@@ -50,7 +50,8 @@ public class ExampleClient {
 
         // replace String parameter with server IP as needed
         ShipConnectionInterface shipConnInterface = ship.openConnection(
-            URI.create("wss://localhost:2001/ship/")
+            new InetSocketAddress("localhost", 2001),
+            "ship"
         );
 
         /*

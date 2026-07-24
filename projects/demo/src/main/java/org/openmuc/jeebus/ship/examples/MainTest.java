@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -126,7 +127,8 @@ public class MainTest {
         LOGGER.info("Opening connection...");
 
         ShipConnectionInterface shipConnInterface = ship2.openConnection(
-            URI.create("wss://127.0.0.1:8080/ship/")
+            new InetSocketAddress("localhost", 8080),
+            "ship"
         );
 
         Instant connectionReady = Instant.now();

@@ -25,13 +25,15 @@ import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
-import java.net.URI;
+import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
@@ -57,17 +59,20 @@ public class Ship implements ShipInterface, AutoCloseable {
      *
      * @return an object representing the connection to the device/server if the
      * connection was successful, else {@code null}
-     * @implNote If a connection with the given URI already exists, that
+     * @implNote If a connection with the given SHIP node already exists, that
      * {@link ShipConnectionInterface} is returned instead of opening a new
      * connection. The reason for this behavior is that we want to avoid double
      * connections, as they are always messy and unreliable to handle.
      */
     @Override
-    public ShipConnectionInterface openConnection(URI serverUri) {
+    public ShipConnectionInterface openConnection(
+        InetSocketAddress socket,
+        String path
+    ) {
         assertNodeAvailable();
 
         Optional<ShipConnectionImpl> existingConnection
-            = getExistingConnection(serverUri);
+            = getExistingConnection(socket);
 
         if (existingConnection.isPresent()) {
             ShipConnectionInterface connApi = existingConnection
@@ -75,14 +80,12 @@ public class Ship implements ShipInterface, AutoCloseable {
                 .getApiShipConn();
             log.info(
                 "Reusing existing connection to {}",
-                serverUri
+                beautify(socket)
             );
             return connApi;
         }
 
-        log.info("connecting to URI {}", serverUri);
-
-        ShipClient client = node.createClient(serverUri);
+        ShipClient client = node.createClient(socket, path);
         ShipClientHandler clientHandler = client.getHandler();
         try {
             if (!clientHandler.isShipConnRdy(5)) {
@@ -100,24 +103,19 @@ public class Ship implements ShipInterface, AutoCloseable {
         return connection.getApiShipConn();
     }
 
-    private Optional<ShipConnectionImpl> getExistingConnection(URI serverUri) {
+    private Optional<ShipConnectionImpl> getExistingConnection(
+        InetSocketAddress socket
+    ) {
         assertNodeAvailable();
         return node
             .getAllWebSocketHandlers()
             .stream()
-            .filter(handler -> hasSameSocket(serverUri, handler))
+            .filter(handler -> Objects.equals(
+                socket,
+                handler.getRemoteSocketAddress()
+            ))
             .map(WebSocketHandler::getShipConnection)
             .findAny();
-    }
-
-    private static boolean hasSameSocket(URI serverUri, WebSocketHandler handler) {
-        return Objects.equals(
-            handler.getRemoteSocketAddress().getHostString(),
-            serverUri.getHost()
-        ) && Objects.equals(
-            handler.getRemoteSocketAddress().getPort(),
-            serverUri.getPort()
-        );
     }
 
     /**

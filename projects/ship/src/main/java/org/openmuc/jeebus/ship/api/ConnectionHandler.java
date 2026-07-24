@@ -10,7 +10,7 @@
 
 package org.openmuc.jeebus.ship.api;
 
-import java.net.URI;
+import java.net.InetSocketAddress;
 
 // TODO: banish IP addresses from the API. Identities should be handled through
 //  SHIP ID + SKI
@@ -43,9 +43,8 @@ public interface ConnectionHandler {
 
     /**
      * Called when a SHIP service is recognized and resolved. Use
-     * {@link ShipService#getInet4Uri()} or {@link ShipService#getInet6Uri()} with
-     * {@link Ship#openConnection(URI)} to open a new client connection to the SHIP
-     * server advertised in the service info.
+     * {@link Ship#openConnection(InetSocketAddress, String)} to open a new client
+     * connection to the SHIP server advertised in the service info.
      *
      * @param service
      *     the complete SHIP mDNS Service Info with specialized access to its

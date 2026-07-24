@@ -277,14 +277,14 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     public void serviceRemoved(ServiceEvent event) {
         log.trace("service removed: {}", event.getName());
         if (connHandler != null) {
-            connHandler.serviceRemoved(new ShipService(event.getInfo()));
+            connHandler.serviceRemoved(new ShipService(event));
         }
     }
 
     @Override
     public void serviceResolved(ServiceEvent event) {
         if (hasProperties(event)) {
-            ShipService service = new ShipService(event.getInfo());
+            ShipService service = new ShipService(event);
 
             if (loggedServices.contains(service.getInstance())) {
                 log.trace(

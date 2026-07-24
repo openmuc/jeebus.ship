@@ -20,7 +20,7 @@ public class ShipUtilities {
         String ip = socket.getAddress().getHostAddress();
         int port = socket.getPort();
 
-        boolean hasHostname = hostname != null && !hostname.equals(ip);
+        boolean hasHostname = hostname != null && !ip.startsWith(hostname);
         boolean isIPv6 = socket.getAddress() instanceof Inet6Address;
 
         StringBuilder sb = new StringBuilder();

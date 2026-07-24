@@ -161,13 +161,6 @@ public class ShipServer {
         return handlers;
     }
 
-    public void setHandlers(List<ShipServerHandler> handlers) {
-        synchronized (this.handlers) {
-            this.handlers.clear();
-            this.handlers.addAll(handlers);
-        }
-    }
-
     public void setConnHandler(ConnectionHandler connHandler) {
         nodeContext.setConnHandler(connHandler);
     }

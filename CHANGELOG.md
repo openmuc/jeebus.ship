@@ -10,12 +10,15 @@
     - Reasonable default values
     - Value validation
     - Immutable config object
-  - Introduce ShipService class to represent SHIP mDNS Services
-  - Change Ship#openConnection to use URI objects instead of Strings
+  - Change `Ship#openConnection` to use `InetSocketAddress` and WSS path instead of
+    address-strings
 
 ### Added
 
+- Introduce ShipService class to represent SHIP mDNS Services
 - Fully support brand, type and serial mDNS TXT-Record flags
+- Implement a fallback to add jmDNS scope IDs to IPv6 link-local addresses that lack
+  network interface information
 
 ### Removed
 

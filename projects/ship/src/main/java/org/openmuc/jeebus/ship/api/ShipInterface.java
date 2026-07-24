@@ -10,22 +10,25 @@
 
 package org.openmuc.jeebus.ship.api;
 
-import java.net.URI;
+import java.net.InetSocketAddress;
 
 public interface ShipInterface {
 
     /**
-     * Opens a connection to a SHIP server. Use {@link ShipService#getInet4Uri()} or
-     * {@link ShipService#getInet6Uri()} to get a correctly formatted URI for a
-     * resolved SHIP service.
+     * Opens a connection to a SHIP server.
      *
-     * @param serverUri
-     *     the Universal Resource Identifier (URI) of the target SHIP server to
-     *     connect to.
+     * @param socket
+     *     the socket address of the target SHIP server to connect to. Use
+     *     {@link ShipService#getInet4SocketAddress()} or
+     *     {@link ShipService#getInet6SocketAddress()} to find the socket address of
+     *     a resolved SHIP service.
+     * @param path
+     *     the WSS path to the SHIP server. Use {@link ShipService#getPath()} to find the
+     *     path for a resolved SHIP service.
      * @return an Interface to represent this particular connection to another SHIP
      * node
      */
-    ShipConnectionInterface openConnection(URI serverUri);
+    ShipConnectionInterface openConnection(InetSocketAddress socket, String path);
 
     /**
      * sets a connection handler

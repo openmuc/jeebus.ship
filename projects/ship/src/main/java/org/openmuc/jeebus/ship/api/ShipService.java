@@ -11,9 +11,13 @@
 package org.openmuc.jeebus.ship.api;
 
 import org.openmuc.jeebus.ship.util.ShipUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
+import javax.jmdns.ServiceEvent;
 import javax.jmdns.ServiceInfo;
+import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.net.*;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,11 +33,14 @@ import java.util.stream.Collectors;
  */
 public class ShipService {
 
-    public static final String WSS_PREFIX = "wss://";
-    private final ServiceInfo serviceInfo;
+    private static final Logger LOG = LoggerFactory.getLogger(
+        MethodHandles.lookup().lookupClass()
+    );
 
-    public ShipService(ServiceInfo serviceInfo) {
-        this.serviceInfo = serviceInfo;
+    private final ServiceEvent event;
+
+    public ShipService(ServiceEvent event) {
+        this.event = event;
     }
 
     /**
@@ -41,7 +48,7 @@ public class ShipService {
      * {@code "Dishwasher ExampleCompany EEB01M3EU"}
      */
     public String getInstance() {
-        return serviceInfo.getName();
+        return event.getInfo().getName();
     }
 
     /**
@@ -49,7 +56,7 @@ public class ShipService {
      * {@code "Dishwasher ExampleCompany EEB01M3EU._ship._tcp.local."}
      */
     public String getFullServiceName() {
-        return serviceInfo.getQualifiedName();
+        return event.getInfo().getQualifiedName();
     }
 
     /**
@@ -64,7 +71,7 @@ public class ShipService {
     }
 
     /**
-     * @return the service's path from the TXT record
+     * @return the service's WSS path from the TXT record
      * @throws IllegalStateException
      *     if the record is empty, as that is not compliant with the SHIP
      *     specification
@@ -88,7 +95,7 @@ public class ShipService {
      * is visible with the {@code register} flag.
      */
     public boolean getAutoAccept() {
-        String registerStr = serviceInfo.getPropertyString("register");
+        String registerStr = event.getInfo().getPropertyString("register");
         return Boolean.parseBoolean(registerStr);
     }
 
@@ -96,21 +103,28 @@ public class ShipService {
      * @return the SHIP node's brand from the TXT record (optional)
      */
     public String getBrand() {
-        return serviceInfo.getPropertyString("brand");
+        return event.getInfo().getPropertyString("brand");
     }
 
     /**
      * @return the SHIP node's type from the TXT record (optional)
      */
     public String getType() {
-        return serviceInfo.getPropertyString("type");
+        return event.getInfo().getPropertyString("type");
     }
 
     /**
      * @return the SHIP node's model from the TXT record (optional)
      */
     public String getModel() {
-        return serviceInfo.getPropertyString("model");
+        return event.getInfo().getPropertyString("model");
+    }
+
+    /**
+     * @return {@link ServiceInfo#getServer()}
+     */
+    public String getServer() {
+        return event.getInfo().getServer();
     }
 
     /**
@@ -127,7 +141,7 @@ public class ShipService {
      * @return the underlying ServiceInfo object
      */
     public ServiceInfo getServiceInfo() {
-        return serviceInfo;
+        return event.getInfo();
     }
 
     /**
@@ -135,113 +149,90 @@ public class ShipService {
      */
     public Set<InetSocketAddress> getSocketAddresses() {
         return Arrays
-            .stream(serviceInfo.getInetAddresses())
+            .stream(event.getInfo().getInetAddresses())
+            .map(this::fixLinkLocal)
             .map(address -> new InetSocketAddress(
-                address.getHostName(),
-                serviceInfo.getPort()
+                address,
+                event.getInfo().getPort()
             ))
             .collect(Collectors.toSet());
     }
 
     /**
-     * @return the IPv4 socket address the SHIP server is bound to or {@code null} if
-     * the service info does not contain a IPv4 address.
+     * @return an optional containing the IPv4 socket address if the SHIP service
+     * contains one.
      * @implNote Apparently, mDNS services may contain multiple IPv4 addresses for a
      * single service in multi-homed environments (see
      * {@link ServiceInfo#getInet4Addresses()}). However, such setups are out of
      * scope for SHIP, so we simply return the first identified address.
      */
-    public InetSocketAddress getInet4SocketAddress() {
-        Optional<Inet4Address> first = Arrays
-            .stream(serviceInfo.getInet4Addresses())
-            .findFirst();
-
-        return first
+    public Optional<InetSocketAddress> getInet4SocketAddress() {
+        return Arrays
+            .stream(event.getInfo().getInet4Addresses())
+            .findFirst()
             .map(inet4Address -> new InetSocketAddress(
                 inet4Address,
-                serviceInfo.getPort()
-            ))
-            .orElse(null);
+                event.getInfo().getPort()
+            ));
     }
 
     /**
-     * @return the IPv6 socket address the SHIP server is bound to or {@code null} if
-     * the service info does not contain a IPv6 address.
+     * @return an optional containing the IPv6 socket address if the SHIP service
+     * contains one.
      * @implNote Apparently, mDNS services may contain multiple IPv6 addresses for a
      * single service in multi-homed environments (see
      * {@link ServiceInfo#getInet4Addresses()}). However, such setups are out of
      * scope for SHIP, so we simply return the first identified address.
      */
-    public InetSocketAddress getInet6SocketAddress() {
-        Optional<Inet6Address> first = Arrays
-            .stream(serviceInfo.getInet6Addresses())
-            .findFirst();
-
-        return first
+    public Optional<InetSocketAddress> getInet6SocketAddress() {
+        return Arrays
+            .stream(event.getInfo().getInet6Addresses())
+            .findFirst()
+            .map(this::fixLinkLocal)
             .map(inet6Address -> new InetSocketAddress(
                 inet6Address,
-                serviceInfo.getPort()
-            ))
-            .orElse(null);
+                event.getInfo().getPort()
+            ));
     }
 
-    /**
-     * @param socketAddress
-     *     the socket address to format as a valid SHIP server URI.
-     * @return a valid URI for the SHIP server from the given socket address
-     * @throws URISyntaxException
-     *     if a valid URI cannot be constructed from the information in this SHIP
-     *     service and the given socket address.
-     */
-    public URI toUri(InetSocketAddress socketAddress) throws URISyntaxException {
-        String path = fixPath();
-
-        return new URI(WSS_PREFIX + socketAddress + path);
-    }
-
-    /**
-     * simply calls {@link ShipService#toUri(InetSocketAddress)} with
-     * {@link ShipService#getInet4SocketAddress()}
-     */
-    public URI getInet4Uri() throws URISyntaxException {
-        return toUri(getInet4SocketAddress());
-    }
-
-    /**
-     * simply calls {@link ShipService#toUri(InetSocketAddress)} with
-     * {@link ShipService#getInet6SocketAddress()}
-     */
-    public URI getInet6Uri() throws URISyntaxException {
-        return toUri(getInet6SocketAddress());
+    private InetAddress fixLinkLocal(InetAddress address) {
+        if (address instanceof Inet6Address
+            && address.isLinkLocalAddress()
+            && ((Inet6Address) address).getScopedInterface() == null
+        ) {
+            try {
+                return Inet6Address.getByAddress(
+                    event.getInfo().getInet6Addresses()[0].getHostName(),
+                    event.getInfo().getInet6Addresses()[0].getAddress(),
+                    ((Inet6Address) event.getDNS().getInetAddress()).getScopeId()
+                );
+            }
+            catch (IOException e) {
+                LOG.warn(
+                    "There was an exception when trying to add a scope to a link-local IPv6 address. The address will probably not work: {}",
+                    address,
+                    e
+                );
+            }
+        }
+        return address;
     }
 
     private String safelyReadRecord(String record) {
-        String content = serviceInfo.getPropertyString(record);
-        if (content == null) {
+        String content = event.getInfo().getPropertyString(record);
+        if (content == null || content.isBlank()) {
             throw new IllegalStateException("TXT record '"
                 + record
-                + "' is null for device "
+                + "' is not set in service "
                 + getInstance());
         }
         return content;
     }
 
-    @Nonnull
-    private String fixPath() {
-        String result = getPath();
-        if (!result.startsWith("/")) {
-            result = "/" + result;
-        }
-        if (!result.endsWith("/")) {
-            result += "/";
-        }
-        return result;
-    }
-
     @Override
     public String toString() {
         String delimiter = "\n\t";
-        return serviceInfo.getQualifiedName()
+        return event.getInfo().getQualifiedName()
             + ":"
             + delimiter
             + "addesses: "
@@ -250,9 +241,9 @@ public class ShipService {
             .map(ShipUtilities::beautify)
             .collect(Collectors.joining("; "))
             + Collections
-            .list(serviceInfo.getPropertyNames())
+            .list(event.getInfo().getPropertyNames())
             .stream()
-            .map(prop -> prop + ": " + serviceInfo.getPropertyString(prop))
+            .map(prop -> prop + ": " + event.getInfo().getPropertyString(prop))
             .collect(Collectors.joining(delimiter, delimiter, ""));
     }
 }

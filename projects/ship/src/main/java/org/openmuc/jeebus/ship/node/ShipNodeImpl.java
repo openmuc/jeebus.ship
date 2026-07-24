@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
-import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -189,7 +189,7 @@ public class ShipNodeImpl {
         }
     }
 
-    public ShipClient createClient(URI serverUri) {
+    public ShipClient createClient(InetSocketAddress address, String path) {
         try {
             SslContext clientCtx = sslContextFactory.generateClientSslContext(
                 keyManagement.getCert()
@@ -201,7 +201,8 @@ public class ShipNodeImpl {
             nodeCtx.setConnHandler(connHandler);
             ShipClient client = new ShipClient(
                 clientCtx,
-                serverUri,
+                address,
+                path,
                 nodeCtx,
                 this
             );
@@ -212,7 +213,7 @@ public class ShipNodeImpl {
             log.error("Exception while creating a SHIP client: ", e);
             Thread.currentThread().interrupt();
         }
-        catch (SSLException e) {
+        catch (SSLException | URISyntaxException e) {
             log.error("Exception while creating a SHIP client: ", e);
         }
         return null;
