@@ -10,27 +10,31 @@
 
 package org.openmuc.jeebus.ship.api;
 
+import java.net.InetSocketAddress;
+
 public interface ShipInterface {
 
     /**
-     * opens a connection to a device/server
+     * Opens a connection to a SHIP server.
      *
-     * @param ipAddr
-     *     the IP address of the device/server to connect to. Example:
-     *     "127.0.0.1:4059"
-     * @return an object to represent this particular connection to another
-     * device/server
+     * @param socket
+     *     the socket address of the target SHIP server to connect to. Use
+     *     {@link ShipService#getInet4SocketAddress()} or
+     *     {@link ShipService#getInet6SocketAddress()} to find the socket address of
+     *     a resolved SHIP service.
+     * @param path
+     *     the WSS path to the SHIP server. Use {@link ShipService#getPath()} to find the
+     *     path for a resolved SHIP service.
+     * @return an Interface to represent this particular connection to another SHIP
+     * node
      */
-    ShipConnectionInterface openConnection(String ipAddr);
+    ShipConnectionInterface openConnection(InetSocketAddress socket, String path);
 
     /**
      * sets a connection handler
      *
-     * @param connHandler
+     * @param connectionHandler
      *     connectionHandler to handle all interactions with SHIP peer
-     *
-     * @deprecated since 2.3.0. Will be renamed to {@code setConnectionHandler} in 3.0.0.
      */
-    @Deprecated(since = "2.3.0")
-    void setConnHandler(ConnectionHandler connHandler);
+    void setConnectionHandler(ConnectionHandler connectionHandler);
 }

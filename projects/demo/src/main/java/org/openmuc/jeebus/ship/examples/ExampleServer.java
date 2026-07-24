@@ -59,16 +59,16 @@ public class ExampleServer {
             }
 
             @Override
-            public void serviceAdded(String ipAddr, String ski) {
+            public void serviceAdded(ShipService service) {
                 /*
                  If you want you can authenticate any received SKI like this.
                  However, this is unsecure and not recommended.
                 */
-                ship.addTrustedSki(ski);
+                ship.addTrustedSki(service.getSki());
             }
 
             @Override
-            public void serviceRemoved(String ipAddr) {
+            public void serviceRemoved(ShipService service) {
                 // do something
             }
 
@@ -87,7 +87,7 @@ public class ExampleServer {
          behaviour as of now.
         */
         ShipConfig conf = ShipConfig.getBuilder()
-            .withServerBindAddresses("[::]:0")
+            .withServerBindAddresses("localhost:2001")
             .withId("EXAMPLEBRAND-EEB01M3EU-001122334455")
             .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M3EU")
             .withCertificateDistinguishedName("CN=example name1")

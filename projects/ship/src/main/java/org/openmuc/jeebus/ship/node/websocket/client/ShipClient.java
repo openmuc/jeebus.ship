@@ -28,16 +28,19 @@ import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 
 public class ShipClient {
     private static final Logger log = LoggerFactory.getLogger(ShipClient.class);
 
     private final SslContext sslContext;
 
+    public static final String WSS_PREFIX = "wss";
+    private final InetSocketAddress socket;
     private final URI uri;
-    private final String host;
-    private final int port;
 
     private final ShipNodeContext nodeContext;
 
@@ -51,15 +54,23 @@ public class ShipClient {
 
     public ShipClient(
         SslContext sslContext,
-        URI uri,
+        InetSocketAddress socket,
+        String path,
         ShipNodeContext nodeContext,
         ShipNodeImpl shipNode
-    ) throws InterruptedException {
+    ) throws InterruptedException, URISyntaxException {
         this.sslContext = sslContext;
+        this.socket = socket;
 
-        this.uri = uri;
-        host = uri.getHost();
-        port = uri.getPort();
+        this.uri = new URI(
+            WSS_PREFIX,
+            null,
+            socket.getAddress().getHostAddress(),
+            socket.getPort(),
+            fixPath(path),
+            null,
+            null
+        );
 
         this.nodeContext = nodeContext;
         this.shipNode = shipNode;
@@ -68,9 +79,7 @@ public class ShipClient {
     }
 
     private void start() throws InterruptedException {
-        log.info("starting client to connect to {} on port {}", host, port);
-
-        // String url = String.format("wss://%s:%d", HOST, PORT);
+        log.info("starting client to connect to {}", uri);
 
         // configure client
         group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
@@ -98,8 +107,8 @@ public class ShipClient {
                     ChannelPipeline pipeline = channel.pipeline();
                     SslHandler sslHandler = sslContext.newHandler(
                         channel.alloc(),
-                        host,
-                        port
+                        socket.getHostString(),
+                        socket.getPort()
                     );
                     pipeline.addLast(sslHandler);
 
@@ -111,19 +120,17 @@ public class ShipClient {
                 }
             });
 
-        ChannelFuture future = bootstrap.connect(host, port);
+        ChannelFuture future = bootstrap.connect(socket);
         if (!future.await(TIMEOUT_MILLIS)) {
-            log.error("Could not open a channel to {}:{} within {} milliseconds.",
-                host,
-                port,
+            log.error("Could not open a channel to {} within {} milliseconds.",
+                uri,
                 TIMEOUT_MILLIS
             );
         }
         else if (!future.isSuccess()) {
-            log.error("There was an error connecting to {}:{} - {}",
-                host,
-                port,
-                future.cause().getMessage()
+            log.error("There was an error connecting to {}",
+                uri,
+                future.cause()
             );
         }
         future.sync();
@@ -139,6 +146,19 @@ public class ShipClient {
         shipNode.removeClient(this);
     }
 
+
+    @Nonnull
+    private String fixPath(String what) {
+        String result = what;
+        if (!result.startsWith("/")) {
+            result = "/" + result;
+        }
+        if (!result.endsWith("/")) {
+            result += "/";
+        }
+        return result;
+    }
+
     public ShipClientHandler getHandler() {
         return handler;
     }
@@ -150,4 +170,5 @@ public class ShipClient {
     public void setConnHandler(ConnectionHandler connHandler) {
         nodeContext.setConnHandler(connHandler);
     }
+
 }

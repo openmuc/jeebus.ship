@@ -11,8 +11,8 @@
 package org.openmuc.jeebus.ship.node.service;
 
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
+import org.openmuc.jeebus.ship.api.ShipService;
 import org.openmuc.jeebus.ship.node.ShipConfig;
-import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +26,6 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
-import static org.bouncycastle.util.Arrays.isNullOrEmpty;
 
 public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
@@ -43,9 +41,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private final ConnectionHandler connHandler;
 
-    private final Map<String, String> ipServiceNameMap = new HashMap<>();
-
-    private final Set<String> loggedIds = new HashSet<>();
+    private final Set<String> loggedServices = new HashSet<>();
 
     private final String hostname;
 
@@ -281,86 +277,35 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     public void serviceRemoved(ServiceEvent event) {
         log.trace("service removed: {}", event.getName());
         if (connHandler != null) {
-            connHandler.serviceRemoved(ipServiceNameMap.get(event.getName()));
-            ipServiceNameMap.remove(event.getName());
+            connHandler.serviceRemoved(new ShipService(event));
         }
     }
 
     @Override
     public void serviceResolved(ServiceEvent event) {
         if (hasProperties(event)) {
-            String id = event.getInfo().getPropertyString("id");
+            ShipService service = new ShipService(event);
 
-            if (loggedIds.contains(id)) {
+            if (loggedServices.contains(service.getInstance())) {
                 log.trace(
                     "mdns service resolved again: {}",
-                    formatServiceInfo(event.getInfo())
+                    service
                 );
             }
             else {
-                loggedIds.add(id);
+                loggedServices.add(service.getInstance());
 
-                log.info("new mDNS service resolved: {}", event.getName());
+                log.info("new mDNS service resolved: {}", service.getInstance());
 
-                log.debug(formatServiceInfo(event.getInfo()));
+                log.debug(service.toString());
             }
 
-            String ipAddr = getIpAndPort(event.getInfo());
-            if (!ipServiceNameMap.containsKey(event.getName())
-                || !ipServiceNameMap.containsValue(ipAddr)) {
-                if (connHandler != null) {
-                    String ski = event.getInfo().getPropertyString("ski");
-                    if (ski != null) {
-                        ipServiceNameMap.put(event.getName(), ipAddr);
-                        connHandler.serviceAdded(ipAddr, ski);
-                    }
-                }
-            }
+            connHandler.serviceAdded(service);
         }
-    }
-
-    public static String formatServiceInfo(ServiceInfo what) {
-        String delimiter = "\n\t";
-        return what.getQualifiedName() + ":" + delimiter
-            + "addesses: " + getSocketAddresses(what)
-                .stream()
-                .map(ShipUtilities::beautify)
-                .collect(Collectors.joining("; "))
-            + Collections.list(what.getPropertyNames())
-            .stream()
-            .map(prop -> prop + ": " + what.getPropertyString(prop))
-            .collect(Collectors.joining(delimiter, delimiter, ""));
-    }
-
-    private static Set<InetSocketAddress> getSocketAddresses(ServiceInfo what) {
-        return Arrays
-            .stream(what.getInetAddresses())
-            .map(address -> new InetSocketAddress(
-                address.getHostName(),
-                what.getPort()
-            ))
-            .collect(Collectors.toSet());
     }
 
     private static boolean hasProperties(ServiceEvent event) {
         return event.getInfo().getPropertyNames().hasMoreElements();
     }
 
-    private static String getIpAndPort(ServiceInfo info) {
-        int port = info.getPort();
-        if (isNullOrEmpty(info.getInet4Addresses())) {
-            return String.format(
-                "[%s]:%s",
-                info.getInet6Addresses()[0].getHostAddress(),
-                port
-            );
-        }
-        else {
-            return String.format(
-                "%s:%s",
-                info.getInet4Addresses()[0].getHostAddress(),
-                port
-            );
-        }
-    }
 }

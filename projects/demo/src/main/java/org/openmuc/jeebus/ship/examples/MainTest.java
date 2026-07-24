@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,12 +50,12 @@ public class MainTest {
             }
 
             @Override
-            public void serviceAdded(String serviceId, String ski) {
+            public void serviceAdded(ShipService service) {
 
             }
 
             @Override
-            public void serviceRemoved(String serviceId) {
+            public void serviceRemoved(ShipService service) {
 
             }
 
@@ -82,12 +84,12 @@ public class MainTest {
             }
 
             @Override
-            public void serviceAdded(String serviceId, String ski) {
+            public void serviceAdded(ShipService service) {
 
             }
 
             @Override
-            public void serviceRemoved(String serviceId) {
+            public void serviceRemoved(ShipService service) {
 
             }
 
@@ -125,7 +127,8 @@ public class MainTest {
         LOGGER.info("Opening connection...");
 
         ShipConnectionInterface shipConnInterface = ship2.openConnection(
-            "127.0.0.1:8080"
+            new InetSocketAddress("localhost", 8080),
+            "ship"
         );
 
         Instant connectionReady = Instant.now();

@@ -10,6 +10,8 @@
 
 package org.openmuc.jeebus.ship.api;
 
+import java.net.InetSocketAddress;
+
 // TODO: banish IP addresses from the API. Identities should be handled through
 //  SHIP ID + SKI
 public interface ConnectionHandler {
@@ -40,31 +42,23 @@ public interface ConnectionHandler {
     void onDisconnect(DisconnectReason reason, ShipConnectionInterface shipConn);
 
     /**
-     * called when a service is recognized and added
+     * Called when a SHIP service is recognized and resolved. Use
+     * {@link Ship#openConnection(InetSocketAddress, String)} to open a new client
+     * connection to the SHIP server advertised in the service info.
      *
-     * @param ipAddr
-     *     the corresponding ip address of the service that was added
-     * @param ski
-     *     the ski value of the service/node that was added
-     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
-     * SHIP-internal detail, not part of the API. Furthermore, the SHIP-ID should be
-     * part of this method.
-     * TODO: this should include the complete resolved service info.
+     * @param service
+     *     the complete SHIP mDNS Service Info with specialized access to its
+     *     associated fields and TXT record values
      */
-    @Deprecated(since = "2.3.0")
-    void serviceAdded(String ipAddr, String ski);
+    void serviceAdded(ShipService service);
 
     /**
-     * called when an added service was removed
+     * Called when a SHIP service is removed.
      *
-     * @param ipAddr
-     *     the corresponding ip address of the service that was removed
-     *
-     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
-     * SHIP-internal detail, not part of the API.
+     * @param service
+     *     the SHIP service that was removed
      */
-    @Deprecated(since = "2.3.0")
-    void serviceRemoved(String ipAddr);
+    void serviceRemoved(ShipService service);
 
     /**
      * Called when the connection to a device reaches the state "Connection Data

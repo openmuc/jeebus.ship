@@ -25,14 +25,15 @@ import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
@@ -57,72 +58,62 @@ public class Ship implements ShipInterface, AutoCloseable {
      * {@inheritDoc}
      *
      * @return an object representing the connection to the device/server if the
-     * connection was successful, else
-     * {@code null}
+     * connection was successful, else {@code null}
+     * @implNote If a connection with the given SHIP node already exists, that
+     * {@link ShipConnectionInterface} is returned instead of opening a new
+     * connection. The reason for this behavior is that we want to avoid double
+     * connections, as they are always messy and unreliable to handle.
      */
     @Override
-    public ShipConnectionInterface openConnection(String ipAddr) {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+    public ShipConnectionInterface openConnection(
+        InetSocketAddress socket,
+        String path
+    ) {
+        assertNodeAvailable();
 
-        Optional<ShipConnectionImpl> shipServerConnection
-            = getShipServerConnection(ipAddr);
+        Optional<ShipConnectionImpl> existingConnection
+            = getExistingConnection(socket);
 
-        if (shipServerConnection.isPresent()) {
-            ShipConnectionInterface connApi = shipServerConnection
+        if (existingConnection.isPresent()) {
+            ShipConnectionInterface connApi = existingConnection
                 .get()
                 .getApiShipConn();
             log.info(
-                "Reusing existing server connection to {}",
-                connApi.getRemoteAddress()
+                "Reusing existing connection to {}",
+                beautify(socket)
             );
             return connApi;
         }
 
-        String uriStr = "wss://" + ipAddr;
-        log.info("websocket uri = {}", uriStr);
-
-        URI uri = null;
+        ShipClient client = node.createClient(socket, path);
+        ShipClientHandler clientHandler = client.getHandler();
         try {
-            uri = new URI(uriStr);
-        }
-        catch (URISyntaxException e) {
-            log.error("exception while trying to create URI: ", e);
-        }
-
-        if (uri != null) {
-            ShipClient client = node.createClient(uri);
-            ShipClientHandler clientHandler = client.getHandler();
-            try {
-                if (!clientHandler.isShipConnRdy(5)) {
-                    throw new IllegalStateException(
-                        "ShipConnection not ready in time");
-                }
+            if (!clientHandler.isShipConnRdy(5)) {
+                throw new IllegalStateException(
+                    "ShipConnection not ready in time");
             }
-            catch (InterruptedException e) {
-                log.error(e.getMessage());
-                Thread.currentThread().interrupt();
-            }
-            ShipConnectionImpl connection = clientHandler.getConnection();
-            runConnectionDataPreparation(connection);
-            return connection.getApiShipConn();
         }
+        catch (InterruptedException e) {
+            log.error(e.getMessage());
+            Thread.currentThread().interrupt();
+        }
+        ShipConnectionImpl connection = clientHandler.getConnection();
+        runConnectionDataPreparation(connection);
 
-        throw new IllegalArgumentException(
-            "could not create a client to the ip address: " + ipAddr);
+        return connection.getApiShipConn();
     }
 
-    private Optional<ShipConnectionImpl> getShipServerConnection(String ipAddr) {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+    private Optional<ShipConnectionImpl> getExistingConnection(
+        InetSocketAddress socket
+    ) {
+        assertNodeAvailable();
         return node
-            .getServers()
+            .getAllWebSocketHandlers()
             .stream()
-            .map(ShipServer::getHandlers)
-            .flatMap(Collection::stream)
-            .filter(handler -> handler.getRemoteIpAndPort().startsWith(ipAddr))
+            .filter(handler -> Objects.equals(
+                socket,
+                handler.getRemoteSocketAddress()
+            ))
             .map(WebSocketHandler::getShipConnection)
             .findAny();
     }
@@ -144,9 +135,7 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     public String getOwnSki() {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+        assertNodeAvailable();
         return node.getKeyManagement().getOwnSkiAsStr();
     }
 
@@ -159,9 +148,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      *     the ski to add to the trusted SKIs
      */
     public synchronized void addTrustedSki(String ski) {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+        assertNodeAvailable();
         if (ski != null && !ski.isEmpty()) {
             KeyManagement.addTrustedSki(ski, 32);
             synchronized (node.getServers()) {
@@ -192,8 +179,8 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @param ski
      *     the ski to remove
      * @return {@code true} if the ski was removed successfully, otherwise
-     * {@code false}, for example because
-     * the trusted SKI list did not contain the passed ski
+     * {@code false}, for example because the trusted SKI list did not contain the
+     * passed ski
      */
     public boolean removeTrustedSki(String ski) {
         if (KeyManagement.removeTrustedSki(ski)) {
@@ -226,10 +213,9 @@ public class Ship implements ShipInterface, AutoCloseable {
 
     /**
      * Sets the node to auto-accept-mode. Authentication can be skipped that way but
-     * clients have a time window of 1 to 120 seconds for the connection
-     * The default value for the window is 60 seconds. If the time
-     * window passed without any client connecting, the auto-accept-mode will be
-     * turned off.
+     * clients have a time window of 1 to 120 seconds for the connection The default
+     * value for the window is 60 seconds. If the time window passed without any
+     * client connecting, the auto-accept-mode will be turned off.
      * <p>
      * @deprecated since 2.3.0. Usage of the auto accept mode is discouraged by the
      * EEBus Initiative and most stack implementers. Experience has shown even one
@@ -238,18 +224,14 @@ public class Ship implements ShipInterface, AutoCloseable {
      */
     @Deprecated(since = "2.3.0")
     public void setAutoAcceptMode() {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+        assertNodeAvailable();
         node.enableAutoAcceptMode();
     }
 
     @Override
-    public void setConnHandler(ConnectionHandler connHandler) {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
-        node.setConnHandler(connHandler);
+    public void setConnectionHandler(ConnectionHandler connectionHandler) {
+        assertNodeAvailable();
+        node.setConnHandler(connectionHandler);
     }
 
     /**
@@ -258,9 +240,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      *     this node.
      */
     public void setClientConnectedListener(ClientConnectedListener listener) {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+        assertNodeAvailable();
         node.setClientConnectedListener(listener);
     }
 
@@ -270,9 +250,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @return the set with all detected services
      */
     public Set<ServiceInfo> getServices() {
-        if (node == null) {
-            throw new IllegalStateException("Ship already shut down!");
-        }
+        assertNodeAvailable();
         return node.getServiceRegistry().listServices();
     }
 
@@ -298,5 +276,11 @@ public class Ship implements ShipInterface, AutoCloseable {
         node.stopAllClients();
         node.stopAllServers();
         log.info("SHIP was shut down");
+    }
+
+    private void assertNodeAvailable() {
+        if (node == null) {
+            throw new IllegalStateException("Ship already shut down!");
+        }
     }
 }

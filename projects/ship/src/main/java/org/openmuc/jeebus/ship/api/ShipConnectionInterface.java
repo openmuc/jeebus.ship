@@ -13,10 +13,8 @@ package org.openmuc.jeebus.ship.api;
 /**
  * users can interact with a specific client or server through this interface
  */
-public interface ShipConnectionInterface {
-    /**
-     * closes the connection
-     */
+public interface ShipConnectionInterface extends AutoCloseable {
+    @Override
     void close();
 
     /**

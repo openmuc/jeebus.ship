@@ -166,7 +166,7 @@ public final class ConfigBuilder {
      * {@code "[1080::8:800:200C:417A]:6060"}
      *
      * @param serverBindAddresses
-     *     String representation of the socket address to bind the SHIP server to
+     *     String representations of the socket address to bind the SHIP server to
      * @return {@link ConfigBuilder#withServerBindAddresses(Set)}
      * @see "RFC 2732; RFC 2373"
      */
