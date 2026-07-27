@@ -207,7 +207,8 @@ public class ShipConnectionImpl implements ShipConnection {
         if (forcedTrustLevel >= 0) {
             return forcedTrustLevel;
         } else {
-            SkiManagementInfo skiManagementInfo = KeyManagement
+            SkiManagementInfo skiManagementInfo = this.nodeContext
+                .getKeyManagement()
                 .getTrustedSkis()
                 .get(connection.getPeerSki());
             if (skiManagementInfo == null) {
@@ -317,6 +318,10 @@ public class ShipConnectionImpl implements ShipConnection {
 
     public boolean isConnectionCloseState() {
         return closeHandler.isClosing();
+    }
+
+    public ShipNodeContext getShipNodeContext() {
+        return this.nodeContext;
     }
 
     public StaticConfiguration getConfig() {

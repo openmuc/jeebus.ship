@@ -206,6 +206,7 @@ public class ShipNodeImpl {
                 keyManagement.getCert()
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
+                this.keyManagement,
                 staticConfig,
                 nodeConfig.getId()
             );
@@ -240,6 +241,7 @@ public class ShipNodeImpl {
                 keyManagement.getCert()
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
+                this.keyManagement,
                 staticConfig,
                 nodeConfig.getId()
             );

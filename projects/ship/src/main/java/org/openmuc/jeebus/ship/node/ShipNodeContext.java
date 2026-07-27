@@ -16,13 +16,20 @@ public class ShipNodeContext {
 
     private final String ownShipId;
 
+    private final KeyManagement keyManagement;
+
     private StaticConfiguration config;
 
     private String logPrefix;
 
     private ConnectionHandler connHandler;
 
-    public ShipNodeContext(StaticConfiguration config, String ownShipId) {
+    public ShipNodeContext(
+        KeyManagement keyManagement,
+        StaticConfiguration config,
+        String ownShipId
+    ) {
+        this.keyManagement = keyManagement;
         this.config = config;
         this.ownShipId = ownShipId;
     }
@@ -31,12 +38,18 @@ public class ShipNodeContext {
         StaticConfiguration config,
         String logPrefix,
         ConnectionHandler connHandler,
-        String ownShipId
+        String ownShipId,
+        KeyManagement keyManagement
     ) {
         this.config = config;
         this.logPrefix = logPrefix;
         this.connHandler = connHandler;
         this.ownShipId = ownShipId;
+        this.keyManagement = keyManagement;
+    }
+
+    public KeyManagement getKeyManagement() {
+        return this.keyManagement;
     }
 
     public StaticConfiguration getConfig() {
