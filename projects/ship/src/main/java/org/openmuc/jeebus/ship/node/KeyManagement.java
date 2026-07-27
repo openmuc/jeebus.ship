@@ -51,7 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class KeyManagement {
 
     protected static final Logger log = LoggerFactory.getLogger(KeyManagement.class);
-    private static final Map<String, SkiManagementInfo> trustedSkis
+    private final Map<String, SkiManagementInfo> trustedSkis
         = new ConcurrentHashMap<>();
     private final CertificateInfo cert;
     private final SubjectKeyIdentifier ownSki;
@@ -158,7 +158,7 @@ public class KeyManagement {
      * @param trustLevel
      *     the trust level of the SKI to be added
      */
-    public static void addTrustedSki(String ski, Integer trustLevel) {
+    public void addTrustedSki(String ski, Integer trustLevel) {
         if (!isValidSki(ski)) {
             throw new IllegalArgumentException("SKI is invalid");
         }
@@ -175,7 +175,7 @@ public class KeyManagement {
         }
     }
 
-    public static void setTrustedSkiAuthenticated(String ski) {
+    public void setTrustedSkiAuthenticated(String ski) {
         if (trustedSkis.containsKey(ski)) {
             trustedSkis.get(ski).setAuthenticated(true);
         }
@@ -193,18 +193,18 @@ public class KeyManagement {
      * @return {@code true} if the map contained the ski, otherwise
      * {@code false}
      */
-    public static boolean removeTrustedSki(String ski) {
+    public boolean removeTrustedSki(String ski) {
         if (ski == null) {
             return false;
         }
         return trustedSkis.remove(ski) != null;
     }
 
-    public static Map<String, SkiManagementInfo> getTrustedSkis() {
+    public Map<String, SkiManagementInfo> getTrustedSkis() {
         return trustedSkis;
     }
 
-    public static void clearTrustedSkis() {
+    public void clearTrustedSkis() {
         trustedSkis.clear();
     }
 

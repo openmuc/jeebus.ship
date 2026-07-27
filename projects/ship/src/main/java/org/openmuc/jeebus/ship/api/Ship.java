@@ -10,7 +10,6 @@
 
 package org.openmuc.jeebus.ship.api;
 
-import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
@@ -150,7 +149,7 @@ public class Ship implements ShipInterface, AutoCloseable {
     public synchronized void addTrustedSki(String ski) {
         assertNodeAvailable();
         if (KeyManagement.isValidSki(ski)) {
-            KeyManagement.addTrustedSki(ski, 32);
+            node.getKeyManagement().addTrustedSki(ski, 32);
             synchronized (node.getServer()) {
                 node.getServer()
                     .stream()
@@ -183,7 +182,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      * passed ski
      */
     public boolean removeTrustedSki(String ski) {
-        if (KeyManagement.removeTrustedSki(ski)) {
+        if (node.getKeyManagement().removeTrustedSki(ski)) {
             // this is what it would look like to also distrust all nodes with that SKI
             // synchronized (node.getServers()) {
             //     node.getServers()
