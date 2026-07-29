@@ -10,6 +10,7 @@
 
 package org.openmuc.jeebus.ship.util;
 
+import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.view.UserInterface;
 
@@ -62,6 +63,11 @@ public class FakeShipConnection implements ShipConnection {
     @Override
     public void initState() {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ShipNodeContext getShipNodeContext() {
+        return null;
     }
 
     @Override

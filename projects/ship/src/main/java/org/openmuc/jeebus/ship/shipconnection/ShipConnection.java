@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.shipconnection;
 
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
+import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.view.UserInterface;
 
 public interface ShipConnection extends ShipConnectionInterface {
@@ -30,4 +31,6 @@ public interface ShipConnection extends ShipConnectionInterface {
      * Start up the SHIP state machine. Callable only once.
      */
     void initState();
+
+    ShipNodeContext getShipNodeContext();
 }

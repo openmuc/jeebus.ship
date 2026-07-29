@@ -35,7 +35,11 @@ public class RegistrationReconnectionTest {
     private final String exampleSki = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992222";
 
     private final ShipNodeContext exampleCtx
-        = new ShipNodeContext(new StaticConfiguration(), "some-id");
+        = new ShipNodeContext(
+            new KeyManagement(),
+            new StaticConfiguration(),
+            "some-id"
+    );
 
     private ShipConnectionImpl exampleConn;
 
@@ -45,8 +49,8 @@ public class RegistrationReconnectionTest {
     @BeforeEach
     public void setUp() {
         when(basicListenerMock.getPeerSki()).thenReturn(exampleSki);
-        KeyManagement.clearTrustedSkis();
-        KeyManagement.addTrustedSki(exampleSki, 32);
+        exampleCtx.getKeyManagement().clearTrustedSkis();
+        exampleCtx.getKeyManagement().addTrustedSki(exampleSki, 32);
     }
 
     @Test
