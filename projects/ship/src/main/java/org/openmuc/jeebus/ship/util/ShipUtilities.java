@@ -10,18 +10,30 @@
 
 package org.openmuc.jeebus.ship.util;
 
+import javax.annotation.Nonnull;
 import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class ShipUtilities {
-    @SuppressWarnings("HardcodedFileSeparator")
     public static String beautify(InetSocketAddress socket) {
-        String hostname = socket.getHostName();
-        String ip = socket.getAddress().getHostAddress();
-        int port = socket.getPort();
+        return getStringBuilder(socket.getAddress())
+            .append(":")
+            .append(socket.getPort())
+            .toString();
+    }
+
+    public static String beautify(InetAddress address) {
+        return getStringBuilder(address).toString();
+    }
+
+    @Nonnull
+    private static StringBuilder getStringBuilder(InetAddress address) {
+        String hostname = address.getHostName();
+        String ip = address.getHostAddress();
 
         boolean hasHostname = hostname != null && !ip.startsWith(hostname);
-        boolean isIPv6 = socket.getAddress() instanceof Inet6Address;
+        boolean isIPv6 = address instanceof Inet6Address;
 
         StringBuilder sb = new StringBuilder();
 
@@ -34,9 +46,6 @@ public class ShipUtilities {
         } else {
             sb.append(ip);
         }
-
-        sb.append(":").append(port);
-
-        return sb.toString();
+        return sb;
     }
 }

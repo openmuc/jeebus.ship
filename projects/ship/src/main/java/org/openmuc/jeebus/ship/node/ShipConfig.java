@@ -29,6 +29,7 @@ public final class ShipConfig {
 
     private final boolean serverEnabled;
     private final Set<InetSocketAddress> serverBindAddresses;
+    private final boolean isAnyAddress;
     private final boolean autoAcceptEnabled;
     private final Set<String> trustedSkis;
 
@@ -49,6 +50,7 @@ public final class ShipConfig {
         String id,
         boolean serverEnabled,
         Set<InetSocketAddress> serverBindAddresses,
+        boolean isAnyAddress,
         boolean autoAcceptEnabled,
         Set<String> trustedSkis,
         String mDnsServiceInstance,
@@ -65,6 +67,7 @@ public final class ShipConfig {
         this.id = id;
         this.serverEnabled = serverEnabled;
         this.serverBindAddresses = serverBindAddresses;
+        this.isAnyAddress = isAnyAddress;
         this.autoAcceptEnabled = autoAcceptEnabled;
         this.trustedSkis = trustedSkis;
         this.mDnsServiceInstance = mDnsServiceInstance;
@@ -130,6 +133,10 @@ public final class ShipConfig {
 
     public Set<InetSocketAddress> getServerBindAddresses() {
         return serverBindAddresses;
+    }
+
+    public boolean isAnyAddress() {
+        return isAnyAddress;
     }
 
     public String getId() {

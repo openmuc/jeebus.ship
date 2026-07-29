@@ -29,6 +29,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
+
 public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -110,7 +112,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         try {
             JmDNS jmdns = JmDNS.create(address, hostname);
             jmdns.addServiceListener(serviceType, this);
-            log.debug("mDNS service initiated for new address {}", address);
+            log.debug("mDNS service initiated for new address {}", beautify(address));
             return jmdns;
         }
         catch (IOException e) {
@@ -118,7 +120,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 "There was an exception while initiating mDNS for {}."
                     + " mDNS sevice discovery will not be available for this"
                     + " address.",
-                address,
+                beautify(address),
                 e
             );
             return null;
@@ -163,21 +165,24 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
      * we used for the already-bound addresses (if any).
      */
     private void registerOnNewInterface(InetAddress newAddress) {
-        if (ownTxt == null || boundSocketAddresses == null
-            || boundSocketAddresses.isEmpty()) {
-            // we haven't been asked to register a service yet
+        if (ownTxt == null
+            || boundSocketAddresses == null
+            || boundSocketAddresses.isEmpty()
+        ) {
             return;
         }
 
-        // reuse the port of an existing bound address
+        // TODO: use port of the new SHIP server binding
         int port = boundSocketAddresses.iterator().next().getPort();
         InetSocketAddress newSocketAddress = new InetSocketAddress(newAddress, port);
 
         InetSocketAddress registered = registerService(newSocketAddress);
         if (registered != null) {
             boundSocketAddresses.add(registered);
-            log.info("Registered mDNS service on newly available interface {}",
-                newSocketAddress);
+            log.info(
+                "Registered mDNS service on newly available interface {}",
+                beautify(newSocketAddress)
+            );
         }
     }
 
@@ -187,13 +192,13 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 JmDNS jmdns = addressJmDNSMap.remove(address);
 
                 if (jmdns != null) {
-                    log.debug("Interface {} disappeared, closing its JmDNS", address);
+                    log.debug("Interface {} disappeared, closing its JmDNS", beautify(address));
                     try (jmdns) {
                         jmdns.unregisterAllServices();
                         jmdns.removeServiceListener(serviceType, this);
                     }
                     catch (IOException e) {
-                        log.warn("Error closing JmDNS for {}", address, e);
+                        log.warn("Error closing JmDNS for {}", beautify(address), e);
                     }
                     if (boundSocketAddresses != null) {
                         boundSocketAddresses.removeIf(socket -> Objects.equals(
@@ -307,7 +312,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
             log.warn(
                 "There was an exception while registering an mDNS service."
                     + " Skipping address {}",
-                socketAddress,
+                beautify(socketAddress),
                 e
             );
             return null;
@@ -344,7 +349,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
             addressJmDNSMap.values().stream()
                 .map(jmdns -> CompletableFuture.runAsync(() -> {
                     try (jmdns) {
-                        log.debug("shutting down JmDNS for {}", jmdns.getInetAddress());
+                        log.debug("shutting down JmDNS for {}", beautify(jmdns.getInetAddress()));
                         jmdns.unregisterAllServices();
                         jmdns.removeServiceListener(serviceType, this);
                     } catch (IOException e) {

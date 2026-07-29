@@ -48,8 +48,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * the required parameters.
  */
 public final class ConfigBuilder {
-    public static final InetSocketAddress IP_V4_ANY;
-    public static final InetSocketAddress IP_V6_ANY;
+    public static final InetSocketAddress INET4_ANY;
+    public static final InetSocketAddress INET6_ANY;
 
     private static final Logger LOG = LoggerFactory.getLogger(
         MethodHandles.lookup().lookupClass()
@@ -57,11 +57,11 @@ public final class ConfigBuilder {
 
     static {
         try {
-            IP_V4_ANY = new InetSocketAddress(
+            INET4_ANY = new InetSocketAddress(
                 Inet4Address.getByAddress(new byte[] { 0, 0, 0, 0 }),
                 0
             );
-            IP_V6_ANY = new InetSocketAddress(
+            INET6_ANY = new InetSocketAddress(
                 InetAddress.getByName("::"),
                 0
             );
@@ -75,7 +75,7 @@ public final class ConfigBuilder {
     private String id;
 
     private boolean serverEnabled = true;
-    private Set<InetSocketAddress> serverBindAddresses = Set.of(IP_V4_ANY);
+    private Set<InetSocketAddress> serverBindAddresses = Set.of(INET4_ANY);
     private boolean autoAcceptEnabled = false;
     private Set<String> trustedSkis;
 
@@ -126,9 +126,11 @@ public final class ConfigBuilder {
      * service discovery using mDNS. This includes finding remote SHIP services as
      * well as registering the service of this device.
      * <p>
-     * By default, this is set to {@code 0.0.0.0:0} to consider all available
-     * network interfaces and use ephemeral free ports.
-     * {@code [::]:0} does the same.
+     * By default, this is set to the ANY adress ({@code 0.0.0.0:0}) to consider all
+     * available network interfaces and use ephemeral free ports. {@code [::]:0} does
+     * the same. If set to the ANY address, the SHIP node will also scan for new
+     * network interfaces during runtime to bind its server to and register new mDNS
+     * services. TODO: adapt the implementation like this
      *
      * @param serverBindAddresses
      *     Socket addresses to bind the SHIP server to. IPv4 and IPv6 addresses are
@@ -447,6 +449,7 @@ public final class ConfigBuilder {
             id,
             serverEnabled,
             serverBindAddresses,
+            theAnyAddress.isPresent(),
             autoAcceptEnabled,
             trustedSkis,
             mDnsServiceInstance,
@@ -487,9 +490,9 @@ public final class ConfigBuilder {
         Set<InetSocketAddress> serverBindAddresses
     ) {
         return serverBindAddresses.stream()
-            .filter(address -> IP_V4_ANY.getAddress()
-                .equals(address.getAddress())
-                || IP_V6_ANY.getAddress().equals(address.getAddress()))
+            .filter(socket ->
+                INET4_ANY.getAddress().equals(socket.getAddress())
+                || INET6_ANY.getAddress().equals(socket.getAddress()))
             .findAny();
     }
 
