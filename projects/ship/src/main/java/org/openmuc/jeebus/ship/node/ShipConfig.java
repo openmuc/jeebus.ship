@@ -14,14 +14,15 @@ import org.openmuc.jeebus.ship.api.ConfigBuilder;
 import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 
 import java.net.*;
+import java.util.Collections;
 import java.util.Set;
 
 /**
  * Holds the immutable configuration of a SHIP node.
  * <p>
  * The configuration is built by {@link ConfigBuilder} and passed to the node's
- * constructor.
- * All fields are final; after construction the instance is thread‑safe.</p>
+ * constructor. All fields are final, all collections immutable. After construction
+ * the instance is thread‑safe.</p>
  */
 public final class ShipConfig {
 
@@ -29,9 +30,12 @@ public final class ShipConfig {
 
     private final boolean serverEnabled;
     private final Set<InetSocketAddress> serverBindAddresses;
-    private final boolean isAnyAddress;
+    private final boolean anyAddressEnabled;
     private final boolean autoAcceptEnabled;
     private final Set<String> trustedSkis;
+
+    private final long networkInterfaceScanInitialDelay;
+    private final long networkInterfaceScanInterval;
 
     private final String mDnsServiceInstance;
     private final String mDnsDomain;
@@ -50,9 +54,11 @@ public final class ShipConfig {
         String id,
         boolean serverEnabled,
         Set<InetSocketAddress> serverBindAddresses,
-        boolean isAnyAddress,
+        boolean anyAddressEnabled,
         boolean autoAcceptEnabled,
         Set<String> trustedSkis,
+        long networkInterfaceScanInitialDelay,
+        long networkInterfaceScanInterval,
         String mDnsServiceInstance,
         String mDnsDomain,
         String brand,
@@ -66,10 +72,12 @@ public final class ShipConfig {
     ) {
         this.id = id;
         this.serverEnabled = serverEnabled;
-        this.serverBindAddresses = serverBindAddresses;
-        this.isAnyAddress = isAnyAddress;
+        this.serverBindAddresses = Collections.unmodifiableSet(serverBindAddresses);
+        this.anyAddressEnabled = anyAddressEnabled;
         this.autoAcceptEnabled = autoAcceptEnabled;
-        this.trustedSkis = trustedSkis;
+        this.trustedSkis = Collections.unmodifiableSet(trustedSkis);
+        this.networkInterfaceScanInitialDelay = networkInterfaceScanInitialDelay;
+        this.networkInterfaceScanInterval = networkInterfaceScanInterval;
         this.mDnsServiceInstance = mDnsServiceInstance;
         this.mDnsDomain = mDnsDomain;
         this.brand = brand;
@@ -115,6 +123,14 @@ public final class ShipConfig {
         return certificateValidity;
     }
 
+    public long getNetworkInterfaceScanInterval() {
+        return networkInterfaceScanInterval;
+    }
+
+    public long getNetworkInterfaceScanInitialDelay() {
+        return networkInterfaceScanInitialDelay;
+    }
+
     public String getmDnsDomain() {
         return mDnsDomain;
     }
@@ -135,8 +151,8 @@ public final class ShipConfig {
         return serverBindAddresses;
     }
 
-    public boolean isAnyAddress() {
-        return isAnyAddress;
+    public boolean getAnyAddressEnabled() {
+        return anyAddressEnabled;
     }
 
     public String getId() {
@@ -161,35 +177,26 @@ public final class ShipConfig {
 
     @Override
     public String toString() {
-        return "ShipConfig{"
-            + "id='"
-            + id
-            + "', serverEnabled="
-            + serverEnabled
-            + ", serverBindAddresses="
-            + serverBindAddresses
-            + ", autoAcceptEnabled="
-            + autoAcceptEnabled
-            + ", trustedSkis="
-            + trustedSkis
-            + ", mDnsServiceInstance='"
-            + mDnsServiceInstance
-            + "', mDnsDomain='"
-            + mDnsDomain
-            + "', brand='"
-            + brand
-            + "', type='"
-            + type
-            + "', model='"
-            + model
-            + "', certificateValidity="
-            + certificateValidity
-            + ", certificateDistinguishedName='"
-            + certificateDistinguishedName
-            + "', wssPath='"
-            + wssPath
-            + "', keepAlive="
-            + keepAlive
-            + '}';
+        return String.format(
+            "ShipConfig{id='%s', serverEnabled=%s, serverBindAddresses=%s, anyAddressEnabled=%s, autoAcceptEnabled=%s, trustedSkis=%s, networkInterfaceScanInitialDelay=%d, networkInterfaceScanInterval=%d, mDnsServiceInstance='%s', mDnsDomain='%s', brand='%s', type='%s', model='%s', certificateStorage=%s, certificateValidity=%d, certificateDistinguishedName='%s', wssPath='%s', keepAlive=%s}",
+            id,
+            serverEnabled,
+            serverBindAddresses,
+            anyAddressEnabled,
+            autoAcceptEnabled,
+            trustedSkis,
+            networkInterfaceScanInitialDelay,
+            networkInterfaceScanInterval,
+            mDnsServiceInstance,
+            mDnsDomain,
+            brand,
+            type,
+            model,
+            certificateStorage,
+            certificateValidity,
+            certificateDistinguishedName,
+            wssPath,
+            keepAlive
+        );
     }
 }

@@ -19,10 +19,7 @@ import javax.jmdns.ServiceInfo;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.*;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -151,6 +148,7 @@ public class ShipService {
         return Arrays
             .stream(event.getInfo().getInetAddresses())
             .map(this::fixLinkLocal)
+            .filter(Objects::nonNull)
             .map(address -> new InetSocketAddress(
                 address,
                 event.getInfo().getPort()
@@ -185,10 +183,12 @@ public class ShipService {
      * scope for SHIP, so we simply return the first identified address.
      */
     public Optional<InetSocketAddress> getInet6SocketAddress() {
+        // noinspection ConstantValue
         return Arrays
             .stream(event.getInfo().getInet6Addresses())
             .findFirst()
             .map(this::fixLinkLocal)
+            .filter(Objects::nonNull)
             .map(inet6Address -> new InetSocketAddress(
                 inet6Address,
                 event.getInfo().getPort()
@@ -207,12 +207,10 @@ public class ShipService {
                     ((Inet6Address) event.getDNS().getInetAddress()).getScopeId()
                 );
             }
-            catch (IOException e) {
-                LOG.warn(
-                    "There was an exception when trying to add a scope to a link-local IPv6 address. The address will probably not work: {}",
-                    address,
-                    e
-                );
+            catch (IOException | ClassCastException e) {
+                // An unscoped link-local IPv6 address is useless.
+                // Let's not expose it to users.
+                return null;
             }
         }
         return address;
@@ -235,11 +233,14 @@ public class ShipService {
         return event.getInfo().getQualifiedName()
             + ":"
             + delimiter
-            + "addesses: "
+            + "addresses: "
             + getSocketAddresses()
             .stream()
             .map(ShipUtilities::beautify)
             .collect(Collectors.joining("; "))
+            + delimiter
+            + "server: "
+            + getServer()
             + Collections
             .list(event.getInfo().getPropertyNames())
             .stream()

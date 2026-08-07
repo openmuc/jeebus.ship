@@ -25,6 +25,7 @@ import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -46,8 +47,9 @@ public class ShipServer {
     private final ShipNodeContext nodeContext;
     private final ShipNodeImpl shipNode;
 
-    private Set<InetSocketAddress> boundSocketAddresses;
-    private ChannelGroup serverChannels;
+    private final Set<InetSocketAddress> boundSocketAddresses = new HashSet<>();
+    private final ChannelGroup serverChannels;
+    private ServerBootstrap bootstrap;
 
     public ShipServer(
         SslContext sslContext,
@@ -67,6 +69,8 @@ public class ShipServer {
         this.nodeContext = nodeContext;
         this.shipNode = shipNode;
 
+        this.serverChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
+
         // TODO
         this.nodeContext.setLogPrefix(
             "SHIP server (" + nodeContext.getOwnShipId() + ")"
@@ -79,7 +83,7 @@ public class ShipServer {
     }
 
     private synchronized void start(
-        Set<InetSocketAddress> bindAddresses
+        Set<InetSocketAddress> bindSockets
     ) {
 
         log.info("starting {}", logPrefix);
@@ -87,37 +91,63 @@ public class ShipServer {
         IoHandlerFactory ioHandlerFactory = NioIoHandler.newFactory();
         bossGroup = new MultiThreadIoEventLoopGroup(1, ioHandlerFactory);
         workerGroup = new MultiThreadIoEventLoopGroup(ioHandlerFactory);
-        ServerBootstrap bootstrap = new ServerBootstrap();
+        bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ShipServerInitializer(sslContext, nodeContext, this))
             .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
-        serverChannels = new DefaultChannelGroup(
-            GlobalEventExecutor.INSTANCE);
-
-        bindAddresses
-            .stream()
-            .map(bootstrap::bind)
-            .map(ShipServer::wrapInRuntimeException)
-            .map(ChannelFuture::channel)
-            .forEach(serverChannels::add);
-
-        boundSocketAddresses = serverChannels.stream()
-            .map(Channel::localAddress)
-            .map(InetSocketAddress.class::cast)
-            .collect(Collectors.toSet());
-
-        log.info(
-            "bound addresses for {}:\n\t{}",
-            logPrefix,
-            boundSocketAddresses.stream()
-                .map(ShipUtilities::beautify)
-                .collect(Collectors.joining("\n\t"))
-        );
+        bindTo(bindSockets);
     }
 
-    private static ChannelFuture wrapInRuntimeException(ChannelFuture toSync) {
+    public void bindTo(Set<InetSocketAddress> sockets) {
+        Set<InetAddress> targetAddresses = sockets
+            .stream()
+            .map(InetSocketAddress::getAddress)
+            .collect(Collectors.toSet());
+
+        synchronized (serverChannels) {
+
+            Set<InetAddress> boundAddresses = boundSocketAddresses
+                .stream()
+                .map(InetSocketAddress::getAddress)
+                .collect(Collectors.toSet());
+
+            serverChannels
+                .stream()
+                .filter(channel -> !targetAddresses.contains(((InetSocketAddress) channel.localAddress()).getAddress()))
+                .peek(serverChannels::remove)
+                .forEach(Channel::close);
+
+            sockets
+                .stream()
+                .filter(socket -> !boundAddresses.contains(socket.getAddress()))
+                .map(bootstrap::bind)
+                .map(ShipServer::syncWithRuntimeException)
+                .map(ChannelFuture::channel)
+                .forEach(serverChannels::add);
+
+            bootstrap.validate();
+
+            boundSocketAddresses.clear();
+
+            boundSocketAddresses.addAll(serverChannels.stream()
+                .map(Channel::localAddress)
+                .filter(Objects::nonNull)
+                .map(InetSocketAddress.class::cast)
+                .collect(Collectors.toSet()));
+
+            log.info(
+                "bound addresses for {}:\n\t{}",
+                logPrefix,
+                boundSocketAddresses.stream()
+                    .map(ShipUtilities::beautify)
+                    .collect(Collectors.joining("\n\t"))
+            );
+        }
+    }
+
+    private static ChannelFuture syncWithRuntimeException(ChannelFuture toSync) {
         try {
             return toSync.sync();
         }
@@ -149,7 +179,6 @@ public class ShipServer {
             // syncing graceful netty shutdowns apparently creates deadlocks
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
-            shipNode.removeServer(this);
         }
         catch (InterruptedException e) {
             log.error("exception while stopping server: ", e);

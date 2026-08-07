@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 
 public class ExampleClient {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         /*
          implement your own ConnHandler, if used purely as client, connHandler
          can be left null
@@ -34,6 +34,7 @@ public class ExampleClient {
             .withId("EXAMPLEBRAND-EEB01M4EU-001122334456")
             .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU")
             .withCertificateDistinguishedName("CN=example name2")
+            .withServerEnabled(false)
             .build();
 
         Ship ship = new Ship(conf, connHandler);
@@ -44,9 +45,6 @@ public class ExampleClient {
          beforehand if authenticating before  opening the connection
         */
         // ship.addTrustedSki(peerSki);
-
-        // auto accept mode will skip verification of public keys
-        ship.setAutoAcceptMode();
 
         // replace String parameter with server IP as needed
         ShipConnectionInterface shipConnInterface = ship.openConnection(
@@ -64,6 +62,8 @@ public class ExampleClient {
         byte[] exampleMsg
             = "{\"msg\":\"example payload\"}".getBytes(StandardCharsets.UTF_8);
         shipConnInterface.sendMsg(exampleMsg);
+
+        Thread.sleep(1000);
 
         // connection can be closed with
         ship.close();

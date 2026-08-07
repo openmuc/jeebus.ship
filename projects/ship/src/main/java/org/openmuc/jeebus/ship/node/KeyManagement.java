@@ -132,7 +132,9 @@ public class KeyManagement {
      * of exactly 40
      */
     public static boolean isValidSki(String ski) {
-        return MessageUtility.isHexDigits(ski)
+        return ski != null
+            && !ski.isBlank()
+            && MessageUtility.isHexDigits(ski)
             && ski.replaceAll("\\s+", "").length() == 40;
     }
 

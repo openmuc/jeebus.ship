@@ -19,10 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.net.*;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -77,7 +74,10 @@ public final class ConfigBuilder {
     private boolean serverEnabled = true;
     private Set<InetSocketAddress> serverBindAddresses = Set.of(INET4_ANY);
     private boolean autoAcceptEnabled = false;
-    private Set<String> trustedSkis;
+    private Set<String> trustedSkis = Collections.emptySet();
+
+    private long networkInterfaceScanInterval = 10;
+    private long networkInterfaceScanInitialDelay = 5;
 
     private String mDnsServiceInstance;
     private String mDnsDomain = "local.";
@@ -130,7 +130,7 @@ public final class ConfigBuilder {
      * available network interfaces and use ephemeral free ports. {@code [::]:0} does
      * the same. If set to the ANY address, the SHIP node will also scan for new
      * network interfaces during runtime to bind its server to and register new mDNS
-     * services. TODO: adapt the implementation like this
+     * services. Else it will only consider addresses given here.
      *
      * @param serverBindAddresses
      *     Socket addresses to bind the SHIP server to. IPv4 and IPv6 addresses are
@@ -204,6 +204,42 @@ public final class ConfigBuilder {
      */
     public ConfigBuilder withAutoAcceptEnabled(boolean autoAcceptEnabled) {
         this.autoAcceptEnabled = autoAcceptEnabled;
+        return this;
+    }
+
+    /**
+     * For mDNS services and the SHIP server to react to changes in the available
+     * network interfaces jEEBus.SHIP does periodic scans and refreshes its server,
+     * services and service listeners accordingly. Here you can configure the
+     * interval between these scans in seconds.
+     *
+     * @param intervalInSeconds
+     *     the interval between network interface scans
+     * @return the updated {@link ConfigBuilder}
+     * @see ConfigBuilder#withNetworkInterfaceScanInitialDelay(long)
+     */
+    public ConfigBuilder withNetworkInterfaceScanInterval(long intervalInSeconds) {
+        this.networkInterfaceScanInterval = intervalInSeconds;
+        return this;
+    }
+
+    /**
+     * For mDNS services and the SHIP server to react to changes in the available
+     * network interfaces jEEBus.SHIP does periodic scans and refreshes its server,
+     * services and service listeners accordingly. Here you can configure an initial
+     * delay before the scanning starts in seconds. Defaults to {@code 5} seconds.
+     * This will also delay mDNS scanning as a whole to give the SHIP node some time
+     * to initialize before remote SHIP services are reported.
+     *
+     * @param initialDelayInSeconds
+     *     the initial delay before network interface scans
+     * @return the updated {@link ConfigBuilder}
+     * @see ConfigBuilder#withNetworkInterfaceScanInterval(long)
+     */
+    public ConfigBuilder withNetworkInterfaceScanInitialDelay(
+        long initialDelayInSeconds
+    ) {
+        this.networkInterfaceScanInitialDelay = initialDelayInSeconds;
         return this;
     }
 
@@ -424,34 +460,20 @@ public final class ConfigBuilder {
         if (theAnyAddress.isPresent()) {
             LOG.info(
                 "SHIP server bind address is set to the ANY address. Using all"
-                    + " network interfaces supporting multicast for server binding"
+                    + " available network interfaces for server binding"
                     + " and mDNS Service Discovery."
             );
-            try {
-                this.serverBindAddresses = NetworkInterface
-                    .networkInterfaces()
-                    .filter(this::safelyCheckMulticastSupport)
-                    .flatMap(NetworkInterface::inetAddresses)
-                    .map(addresss -> new InetSocketAddress(
-                        addresss,
-                        theAnyAddress.get().getPort()
-                    ))
-                    .collect(Collectors.toSet());
-            }
-            catch (SocketException e) {
-                throw new IllegalArgumentException(
-                    "There was an error retrieving available network interfaces",
-                    e
-                );
-            }
         }
         return new ShipConfig(
             id,
             serverEnabled,
-            serverBindAddresses,
+            // if there is an ANY address, disregard other addresses
+            theAnyAddress.map(Set::of).orElse(serverBindAddresses),
             theAnyAddress.isPresent(),
             autoAcceptEnabled,
             trustedSkis,
+            networkInterfaceScanInitialDelay,
+            networkInterfaceScanInterval,
             mDnsServiceInstance,
             mDnsDomain,
             brand,

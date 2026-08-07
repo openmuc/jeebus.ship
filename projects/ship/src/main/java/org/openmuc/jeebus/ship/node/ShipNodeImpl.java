@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -41,8 +42,7 @@ public class ShipNodeImpl {
 
     protected static final Logger log = LoggerFactory.getLogger(ShipNodeImpl.class);
 
-    private final List<ShipServer> servers
-        = Collections.synchronizedList(new ArrayList<>());
+    private final Optional<ShipServer> server;
 
     private final List<ShipClient> clients
         = Collections.synchronizedList(new ArrayList<>());
@@ -50,6 +50,8 @@ public class ShipNodeImpl {
     private final ShipConfig nodeConfig;
 
     private final KeyManagement keyManagement;
+
+    private final NetworkInterfaceScanner networkInterfaceScanner;
 
     private boolean autoAccept;
 
@@ -116,26 +118,34 @@ public class ShipNodeImpl {
         );
 
         if (nodeConfig.getServerEnabled()) {
-            ShipServer server = createServer(
+            this.server = Optional.of(createServer(
                 nodeConfig.getServerBindAddresses(),
                 nodeConfig.getWssPath(),
                 nodeConfig.isKeepAlive()
-            );
+            ));
 
             if (nodeConfig.getAutoAcceptEnabled()) {
                 enableAutoAcceptMode();
             }
 
-            serviceRegistry.initiateServices(
-                getOwnSki(),
-                server.getBoundSocketAddresses()
+            serviceRegistry.initiateTxt(
+                getOwnSki()
             );
         }
+        else {
+            this.server = Optional.empty();
+        }
+
+        networkInterfaceScanner = new NetworkInterfaceScanner(
+            serviceRegistry,
+            this,
+            nodeConfig
+        );
     }
 
     public Set<WebSocketHandler> getAllWebSocketHandlers() {
         return Stream.concat(
-            servers.stream()
+            server.stream()
                 .map(ShipServer::getHandlers)
                 .flatMap(Collection::stream),
             clients.stream()
@@ -145,25 +155,26 @@ public class ShipNodeImpl {
 
     public void closeDoubleConns(WebSocketHandler current) {
         List<ShipServerHandler> serverHandlerToClose = new ArrayList<>();
-        for (ShipServer server : servers) {
-            for (ShipServerHandler serverHandler : server.getHandlers()) {
-                if (serverHandler.getPeerSki().equals(current.getPeerSki())
-                    && !serverHandler.equals(current)) {
-                    ShipConnectionImpl shipConn = serverHandler.getShipConnection();
-                    if (shipConn != null) {
-                        shipConn.stopStateTimeouts();
-                        if (shipConn.getCde() != null) {
-                            shipConn.initiateConnectionClose(
-                                100,
-                                ConnectionCloseReasonType.UNSPECIFIC
-                            );
-                        }
+        for (ShipServerHandler serverHandler : server
+            .map(ShipServer::getHandlers)
+            .orElse(Collections.emptyList())
+        ) {
+            if (serverHandler.getPeerSki().equals(current.getPeerSki())
+                && !serverHandler.equals(current)) {
+                ShipConnectionImpl shipConn = serverHandler.getShipConnection();
+                if (shipConn != null) {
+                    shipConn.stopStateTimeouts();
+                    if (shipConn.getCde() != null) {
+                        shipConn.initiateConnectionClose(
+                            100,
+                            ConnectionCloseReasonType.UNSPECIFIC
+                        );
                     }
-                    if (shipConn == null
-                        || !shipConn.isConnectionCloseState()) {
-                        log.info("close double conn initiated");
-                        serverHandlerToClose.add(serverHandler);
-                    }
+                }
+                if (shipConn == null
+                    || !shipConn.isConnectionCloseState()) {
+                    log.info("close double conn initiated");
+                    serverHandlerToClose.add(serverHandler);
                 }
             }
         }
@@ -233,7 +244,7 @@ public class ShipNodeImpl {
                 nodeConfig.getId()
             );
             nodeCtx.setConnHandler(connHandler);
-            ShipServer server = new ShipServer(
+            return new ShipServer(
                 sslCtx,
                 bindAddresses,
                 wssPath,
@@ -241,8 +252,6 @@ public class ShipNodeImpl {
                 this,
                 keepAlive
             );
-            servers.add(server);
-            return server;
         }
         catch (InterruptedException e) {
             log.error("Exception while creating a SHIP client: ", e);
@@ -298,10 +307,8 @@ public class ShipNodeImpl {
         return false;
     }
 
-    public void stopAllServers() {
-        // clone the list first to avoid ConcurrentModificationException
-        List<ShipServer> servers = new ArrayList<>(this.servers);
-        servers.forEach(ShipServer::stop);
+    public void stopServer() {
+        this.server.ifPresent(ShipServer::stop);
     }
 
     public void stopAllClients() {
@@ -314,15 +321,8 @@ public class ShipNodeImpl {
         return serviceRegistry;
     }
 
-    public List<ShipServer> getServers() {
-        return servers;
-    }
-
-    public void setServers(List<ShipServer> servers) {
-        synchronized (this.servers) {
-            this.servers.clear();
-            this.servers.addAll(servers);
-        }
+    public Optional<ShipServer> getServer() {
+        return server;
     }
 
     public List<ShipClient> getClients() {
@@ -334,10 +334,6 @@ public class ShipNodeImpl {
             this.clients.clear();
             this.clients.addAll(clients);
         }
-    }
-
-    public void addClient(ShipClient client) {
-        clients.add(client);
     }
 
     public KeyManagement getKeyManagement() {
@@ -353,9 +349,7 @@ public class ShipNodeImpl {
     }
 
     public void setConnHandler(ConnectionHandler connHandler) {
-        for (ShipServer server : servers) {
-            server.setConnHandler(connHandler);
-        }
+        server.ifPresent(server -> server.setConnHandler(connHandler));
 
         for (ShipClient client : clients) {
             client.setConnHandler(connHandler);
@@ -375,30 +369,19 @@ public class ShipNodeImpl {
         clients.remove(client);
     }
 
-    public void removeServer(ShipServer server) {
-        servers.remove(server);
-    }
-
     public synchronized boolean isDoubleConnection(String peerSki) {
-        int matches = 0;
-        synchronized (servers) {
-            for (ShipServer server : servers) {
-                for (ShipServerHandler handler : server
-                    .getHandlers()) {
-                    if (handler.getPeerSki().equals(peerSki)) {
-                        matches++;
-                    }
-                }
-            }
-        }
-        synchronized (clients) {
-            for (ShipClient client : clients) {
-                if (client.getHandler().getPeerSki().equals(peerSki)) {
-                    matches++;
-                }
-            }
-        }
-        // if remote host matches the host in parameter more than once, then return true
+        long matches = Stream
+            .concat(
+                server
+                    .map(ShipServer::getHandlers)
+                    .stream()
+                    .flatMap(Collection::stream),
+                clients.stream().map(ShipClient::getHandler))
+            .map(WebSocketHandler::getPeerSki)
+            .filter(Predicate.isEqual(peerSki))
+            .count();
+        // if remote host matches the host in parameter more than once,
+        // then return true
         return matches > 1;
     }
 

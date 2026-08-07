@@ -14,6 +14,7 @@ import javax.annotation.Nonnull;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Comparator;
 
 public class ShipUtilities {
     public static String beautify(InetSocketAddress socket) {
@@ -48,4 +49,7 @@ public class ShipUtilities {
         }
         return sb;
     }
+
+    public static final Comparator<InetAddress> SCOPED_ADDRESS_ORDER =
+        Comparator.comparing(InetAddress::getHostAddress);
 }

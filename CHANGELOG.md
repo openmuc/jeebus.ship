@@ -17,6 +17,8 @@
 
 - Introduce ShipService class to represent SHIP mDNS Services
 - Fully support brand, type and serial mDNS TXT-Record flags
+- Implement `NetworkInterfaceScanner` to refresh and recover server, mDNS service
+  listeners and services according to changes in the available network interfaces.
 - Implement a fallback to add jmDNS scope IDs to IPv6 link-local addresses that lack
   network interface information
 
