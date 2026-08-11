@@ -14,7 +14,11 @@ import javax.annotation.Nonnull;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.TreeSet;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 public class ShipUtilities {
     public static String beautify(InetSocketAddress socket) {
@@ -50,6 +54,24 @@ public class ShipUtilities {
         return sb;
     }
 
-    public static final Comparator<InetAddress> SCOPED_ADDRESS_ORDER =
-        Comparator.comparing(InetAddress::getHostAddress);
+    public static final Comparator<InetAddress> SCOPED_ADDRESS_ORDER
+        = (left, right) -> {
+
+            int byteCompare = Arrays.compare(left.getAddress(), right.getAddress());
+
+            if (byteCompare == 0
+                && left instanceof Inet6Address && right instanceof Inet6Address
+            ) {
+                return Integer.compare(
+                    ((Inet6Address) left).getScopeId(),
+                    ((Inet6Address) right).getScopeId()
+                );
+            }
+            return byteCompare;
+        };
+
+    @Nonnull
+    public static Collector<InetAddress, ?, TreeSet<InetAddress>> toScopedAddressTreeSet() {
+        return Collectors.toCollection(() -> new TreeSet<>(SCOPED_ADDRESS_ORDER));
+    }
 }

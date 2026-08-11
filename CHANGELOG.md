@@ -26,6 +26,11 @@
 
 - discontinued the `ship-cli` subproject
 
+### Fixed
+
+- Stop calling ConnectionHandler#serviceAdded when resolving the nodes own mDNS
+  service
+
 ## [2.3.0] - 2026-07-09
 
 ### Changed

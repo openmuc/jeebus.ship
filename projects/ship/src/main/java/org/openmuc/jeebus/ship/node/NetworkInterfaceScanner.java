@@ -14,20 +14,15 @@ import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
 
-import static org.openmuc.jeebus.ship.util.ShipUtilities.SCOPED_ADDRESS_ORDER;
+import static java.util.stream.Collectors.toSet;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.toScopedAddressTreeSet;
 
 public class NetworkInterfaceScanner implements AutoCloseable {
 
@@ -54,17 +49,26 @@ public class NetworkInterfaceScanner implements AutoCloseable {
         this.node = node;
         this.config = config;
 
-        if (config.getAnyAddressEnabled()
-            && config.getServerEnabled()
-        ) {
-            globalServerPort = node
-                .getServer()
-                .orElseThrow()
-                .getBoundSocketAddresses()
-                .stream()
-                .findAny()
-                .orElseThrow()
-                .getPort();
+        if (config.getServerEnabled()) {
+            if (config.getAnyAddressEnabled()) {
+                globalServerPort = node
+                    .getServer()
+                    .orElseThrow()
+                    .getBoundSocketAddresses()
+                    .stream()
+                    .findAny()
+                    .orElseThrow()
+                    .getPort();
+            }
+            else {
+                targetAddresses = node
+                    .getServer()
+                    .orElseThrow()
+                    .getBoundSocketAddresses()
+                    .stream()
+                    .map(InetSocketAddress::getAddress)
+                    .collect(toScopedAddressTreeSet());
+            }
         }
         else {
             targetAddresses = config
@@ -84,11 +88,6 @@ public class NetworkInterfaceScanner implements AutoCloseable {
         );
     }
 
-    @Nonnull
-    private static Collector<InetAddress, ?, TreeSet<InetAddress>> toScopedAddressTreeSet() {
-        return Collectors.toCollection(() -> new TreeSet<>(SCOPED_ADDRESS_ORDER));
-    }
-
     private void scanInterfaces() {
         try {
             Set<InetAddress> liveAddresses = currentInterfaceAddresses();
@@ -103,7 +102,7 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                         serviceRegistry.registerServices(liveAddresses
                             .stream()
                             .map(a -> new InetSocketAddress(a, globalServerPort))
-                            .collect(Collectors.toSet()));
+                            .collect(toSet()));
                     }
                 }
                 else {
@@ -115,7 +114,7 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                                 config.getServerBindAddresses()
                                     .stream()
                                     .filter(socket -> liveAddresses.contains(socket.getAddress()))
-                                    .collect(Collectors.toSet())
+                                    .collect(toSet())
                             );
                         }
 
@@ -124,7 +123,6 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                             .orElseThrow()
                             .getBoundSocketAddresses());
                     }
-
                     serviceRegistry.updateListeners(liveAddresses
                         .stream()
                         .filter(targetAddresses::contains)
@@ -141,16 +139,20 @@ public class NetworkInterfaceScanner implements AutoCloseable {
     private Set<InetAddress> currentInterfaceAddresses() throws SocketException {
         return Collections.list(NetworkInterface.getNetworkInterfaces())
             .stream()
-            .filter(NetworkInterfaceScanner::checkSuitable)
+            .filter(this::checkSuitable)
             .map(NetworkInterface::getInetAddresses)
             .map(Collections::list)
             .flatMap(Collection::stream)
-            .collect(Collectors.toSet());
+            .collect(toSet());
     }
 
-    private static boolean checkSuitable(NetworkInterface adapter) {
+    private boolean checkSuitable(NetworkInterface adapter) {
         try {
-            return adapter.isUp() && adapter.supportsMulticast();
+            return adapter.isUp() && adapter.supportsMulticast()
+                || targetAddresses != null
+                && adapter.isUp()
+                && adapter.isLoopback()
+                && targetAddresses.contains(InetAddress.getLoopbackAddress());
         }
         catch (SocketException e) {
             // If we can't even check the interface, it might as well be down...

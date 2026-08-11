@@ -24,9 +24,11 @@ import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -51,7 +53,10 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     private final ShipConfig config;
 
     private TxtRecord ownTxt;
+
     private Set<InetSocketAddress> boundSocketAddresses = Collections.emptySet();
+
+    private final Set<ShipService> reportedServices = new ConcurrentSkipListSet<>();
 
     /**
      * creates a new ServiceRegistry, but does not initiate any listeners nor
@@ -287,67 +292,95 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     @Override
     public void serviceAdded(ServiceEvent event) {
-        // Required to force serviceResolved to be called again
-        // (after the first search)
-        if (event.getInfo() == null) {
-            event.getDNS().requestServiceInfo(event.getType(), event.getName());
-        }
-        else {
-            serviceResolved(event);
-        }
+        // JmDNS handles service resolving automatically.
     }
 
     @Override
     public void serviceResolved(ServiceEvent event) {
         if (hasProperties(event)) {
 
-            ShipService service = new ShipService(event);
+            ShipService service = new ShipService(event.getInfo(), fixLinkLocal(event));
 
-            if (service.getSocketAddresses().isEmpty()
-                || wasResolvedOnWrongInterface(service)
-            ) {
+            if (service.getSocketAddresses().isEmpty()) {
                 log.trace(
                     "SHIP Service does not contain any valid socket addresses. It will be ignored: \n\t{}",
                     service
                 );
             }
+            else if (reportedServices.contains(service)) {
+                log.trace(
+                    "SHIP Service was already reported. It will be ignored: \n\t{}",
+                    service
+                );
+            }
             else {
-                connHandler.serviceAdded(service);
+                reportedServices.add(service);
 
-                log.info("new mDNS service resolved: {}", service.getInstance());
+                if (connHandler != null && !isUs(service)) {
+                    connHandler.serviceAdded(service);
+                    log.info("new mDNS service resolved: {}", service.getInstance());
+                }
 
                 log.debug(service.toString());
             }
         }
     }
 
-    private boolean wasResolvedOnWrongInterface(ShipService service) {
+    private boolean isUs(ShipService service) {
+        return Objects.equals(service.getSki(), ownTxt.getSki())
+            && Objects.equals(service.getShipId(), ownTxt.getId());
+    }
 
-        Optional<InetAddress> inet6 = service.getInet6SocketAddress()
-            .map(InetSocketAddress::getAddress);
+    private Optional<Inet6Address> fixLinkLocal(ServiceEvent event) {
 
-        if (inet6.isPresent()) {
-            Set<Integer> associatedScopes = addressJmDNSMap
-                .keySet()
-                .stream()
-                .filter(inet6.get()::equals)
-                .map(Inet6Address.class::cast)
-                .map(Inet6Address::getScopeId)
-                .collect(Collectors.toSet());
+        Optional<Inet6Address> inet6 = Arrays
+            .stream(event.getInfo().getInet6Addresses())
+            .findFirst();
 
-            return associatedScopes.size() == 1
-                && !associatedScopes.contains(((Inet6Address) inet6.get()).getScopeId());
+        if (inet6.isPresent()
+            && inet6.get().isLinkLocalAddress()
+            && inet6.get().getScopedInterface() == null
+        ) {
+            try {
+                InetAddress dnsAddress = event.getDNS().getInetAddress();
+
+                if (dnsAddress instanceof Inet6Address) {
+                    Set<Integer> associatedScopes = addressJmDNSMap
+                        .keySet()
+                        .stream()
+                        .filter(Predicate.isEqual(dnsAddress))
+                        .map(Inet6Address.class::cast)
+                        .map(Inet6Address::getScopeId)
+                        .collect(Collectors.toSet());
+
+                    if (associatedScopes.size() == 1) {
+                        return Optional.of(Inet6Address.getByAddress(
+                            inet6.get().getHostName(),
+                            inet6.get().getAddress(),
+                            associatedScopes.stream().findAny().orElseThrow()
+                        ));
+                    }
+                }
+                return Optional.empty();
+            }
+            catch (IOException e) {
+                // if we can't fix it, it's useless
+                return Optional.empty();
+            }
         }
-        else {
-            return false;
-        }
+        return inet6;
     }
 
     @Override
     public void serviceRemoved(ServiceEvent event) {
         log.debug("service removed: {}", event.getName());
-        if (connHandler != null) {
-            connHandler.serviceRemoved(new ShipService(event));
+        ShipService service = new ShipService(
+            event.getInfo(),
+            fixLinkLocal(event)
+        );
+        reportedServices.remove(service);
+        if (connHandler != null && !isUs(service)) {
+            connHandler.serviceRemoved(service);
         }
     }
 
