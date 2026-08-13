@@ -18,8 +18,10 @@ import org.openmuc.jeebus.ship.util.ShipTestUtil;
 import javax.jmdns.ServiceInfo;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -57,6 +59,13 @@ class ServiceRegistryTest {
             validSki
         );
 
+        Set<InetAddress> addressSet = config
+            .getServerBindAddresses()
+            .stream()
+            .map(InetSocketAddress::getAddress)
+            .collect(Collectors.toSet());
+
+        serviceReg.updateListeners(addressSet);
         serviceReg.registerServices(config.getServerBindAddresses());
 
         try (
@@ -65,11 +74,7 @@ class ServiceRegistryTest {
                 configBuilder.but().withId(halfId + "021122334456").build(),
                 null
         )) {
-            serviceReg2.updateListeners(config
-                .getServerBindAddresses()
-                .stream()
-                .map(InetSocketAddress::getAddress)
-                .collect(Collectors.toSet()));
+            serviceReg2.updateListeners(addressSet);
 
             await()
                 .atMost(20, SECONDS)

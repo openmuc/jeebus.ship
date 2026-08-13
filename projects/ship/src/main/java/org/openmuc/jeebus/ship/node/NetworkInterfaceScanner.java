@@ -106,6 +106,11 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                     }
                 }
                 else {
+                    serviceRegistry.updateListeners(liveAddresses
+                        .stream()
+                        .filter(targetAddresses::contains)
+                        .collect(toScopedAddressTreeSet()));
+
                     if (config.getServerEnabled()) {
 
                         // Let's not rebind the server on the first scan
@@ -123,10 +128,6 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                             .orElseThrow()
                             .getBoundSocketAddresses());
                     }
-                    serviceRegistry.updateListeners(liveAddresses
-                        .stream()
-                        .filter(targetAddresses::contains)
-                        .collect(toScopedAddressTreeSet()));
                 }
                 previousAddresses = liveAddresses;
             }

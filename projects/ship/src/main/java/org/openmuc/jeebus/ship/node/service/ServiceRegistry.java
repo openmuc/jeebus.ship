@@ -100,23 +100,28 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     }
 
     private void initiateListener(InetAddress address) {
-        try {
-            JmDNS jmdns = JmDNS.create(address, hostname);
-            jmdns.addServiceListener(serviceType, this);
-            log.debug(
-                "mDNS service initiated for new address {}",
-                beautify(address)
-            );
-            addressJmDNSMap.put(address, jmdns);
-        }
-        catch (IOException e) {
-            log.warn(
-                "There was an exception while initiating mDNS for {}."
-                    + " mDNS sevice discovery will not be available for this"
-                    + " address.",
-                beautify(address),
-                e
-            );
+        if(
+            !addressJmDNSMap.containsKey(address)
+            || addressJmDNSMap.get(address) == null
+        ) {
+            try {
+                JmDNS jmdns = JmDNS.create(address, hostname);
+                jmdns.addServiceListener(serviceType, this);
+                log.debug(
+                    "mDNS service initiated for new address {}",
+                    beautify(address)
+                );
+                addressJmDNSMap.put(address, jmdns);
+            }
+            catch (IOException e) {
+                log.warn(
+                    "There was an exception while initiating mDNS for {}."
+                        + " mDNS sevice discovery will not be available for this"
+                        + " address.",
+                    beautify(address),
+                    e
+                );
+            }
         }
     }
 
@@ -142,13 +147,21 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                         forAddress
                     ) == 0);
             }
-            reportedServices.removeIf(service ->
-                service
+            Optional<ShipService> service = reportedServices.stream().filter(entry ->
+                entry
                     .getSocketAddresses()
                     .stream()
                     .map(InetSocketAddress::getAddress)
-                    .anyMatch(address -> SCOPED_ADDRESS_ORDER.compare(address, forAddress) == 0)
-            );
+                    .anyMatch(address -> SCOPED_ADDRESS_ORDER.compare(
+                        address,
+                        forAddress
+                    ) == 0)
+            ).findAny();
+
+            if (service.isPresent() && !isUs(service.get())) {
+                reportedServices.remove(service.get());
+                connHandler.serviceRemoved(service.get());
+            }
         }
     }
 
@@ -230,25 +243,23 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private InetSocketAddress registerService(InetSocketAddress socketAddress) {
         JmDNS boundJmDns = addressJmDNSMap.get(socketAddress.getAddress());
-        try {
-            if (boundJmDns == null) {
-                initiateListener(socketAddress.getAddress());
-                boundJmDns = addressJmDNSMap.get(socketAddress.getAddress());
+        if (boundJmDns != null) {
+            try {
+                boundJmDns.registerService(
+                    createServiceInfo(socketAddress.getPort(), ownTxt)
+                );
+                return socketAddress;
             }
-            boundJmDns.registerService(
-                createServiceInfo(socketAddress.getPort(), ownTxt)
-            );
-            return socketAddress;
+            catch (IOException e) {
+                log.warn(
+                    "There was an exception while registering an mDNS service."
+                        + " Skipping address {}",
+                    beautify(socketAddress),
+                    e
+                );
+            }
         }
-        catch (IOException e) {
-            log.warn(
-                "There was an exception while registering an mDNS service."
-                    + " Skipping address {}",
-                beautify(socketAddress),
-                e
-            );
-            return null;
-        }
+        return null;
     }
 
     private void unregisterAllServices() {
