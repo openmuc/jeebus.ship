@@ -131,6 +131,10 @@ public final class ConfigBuilder {
      * the same. If set to the ANY address, the SHIP node will also scan for new
      * network interfaces during runtime to bind its server to and register new mDNS
      * services. Else it will only consider addresses given here.
+     * <p>
+     * Support for multiple socket addresses with different port numbers is limited
+     * and can lead to wrong mDNS services being registered or discovered. It is
+     * recommended to choose one free port number and use that for all sockets.
      *
      * @param serverBindAddresses
      *     Socket addresses to bind the SHIP server to. IPv4 and IPv6 addresses are
@@ -166,6 +170,9 @@ public final class ConfigBuilder {
      * {@code "127.0.0.1:8080"};
      * {@code "[1080:0:0:0:8:800:200C:417A]:2001"};
      * {@code "[1080::8:800:200C:417A]:6060"}
+     * <p>
+     * Please see {@link ConfigBuilder#withServerBindAddresses(Set)} for further
+     * important information on socket address configuration.
      *
      * @param serverBindAddresses
      *     String representations of the socket address to bind the SHIP server to

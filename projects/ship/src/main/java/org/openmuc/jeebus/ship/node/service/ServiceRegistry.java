@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -143,6 +142,13 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                         forAddress
                     ) == 0);
             }
+            reportedServices.removeIf(service ->
+                service
+                    .getSocketAddresses()
+                    .stream()
+                    .map(InetSocketAddress::getAddress)
+                    .anyMatch(address -> SCOPED_ADDRESS_ORDER.compare(address, forAddress) == 0)
+            );
         }
     }
 
