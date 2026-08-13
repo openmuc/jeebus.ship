@@ -14,16 +14,12 @@ import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.jmdns.ServiceEvent;
 import javax.jmdns.ServiceInfo;
-import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.*;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * This class represents a SHIP mDNS Service Info and provides specialized access to
@@ -31,16 +27,21 @@ import java.util.stream.Collectors;
  *
  * @see "SHIP:7 Discovery"
  */
-public class ShipService {
+public class ShipService implements Comparable<ShipService> {
 
     private static final Logger LOG = LoggerFactory.getLogger(
         MethodHandles.lookup().lookupClass()
     );
 
-    private final ServiceEvent event;
+    private final ServiceInfo info;
+    private final Optional<InetSocketAddress> inet6Socket;
 
-    public ShipService(ServiceEvent event) {
-        this.event = event;
+    public ShipService(ServiceInfo info, Optional<Inet6Address> inet6Address) {
+        this.info = info;
+        this.inet6Socket = inet6Address.map(address -> new InetSocketAddress(
+            address,
+            info.getPort()
+        ));
     }
 
     /**
@@ -48,7 +49,7 @@ public class ShipService {
      * {@code "Dishwasher ExampleCompany EEB01M3EU"}
      */
     public String getInstance() {
-        return event.getInfo().getName();
+        return info.getName();
     }
 
     /**
@@ -56,7 +57,7 @@ public class ShipService {
      * {@code "Dishwasher ExampleCompany EEB01M3EU._ship._tcp.local."}
      */
     public String getFullServiceName() {
-        return event.getInfo().getQualifiedName();
+        return info.getQualifiedName();
     }
 
     /**
@@ -95,7 +96,7 @@ public class ShipService {
      * is visible with the {@code register} flag.
      */
     public boolean getAutoAccept() {
-        String registerStr = event.getInfo().getPropertyString("register");
+        String registerStr = info.getPropertyString("register");
         return Boolean.parseBoolean(registerStr);
     }
 
@@ -103,28 +104,28 @@ public class ShipService {
      * @return the SHIP node's brand from the TXT record (optional)
      */
     public String getBrand() {
-        return event.getInfo().getPropertyString("brand");
+        return info.getPropertyString("brand");
     }
 
     /**
      * @return the SHIP node's type from the TXT record (optional)
      */
     public String getType() {
-        return event.getInfo().getPropertyString("type");
+        return info.getPropertyString("type");
     }
 
     /**
      * @return the SHIP node's model from the TXT record (optional)
      */
     public String getModel() {
-        return event.getInfo().getPropertyString("model");
+        return info.getPropertyString("model");
     }
 
     /**
      * @return {@link ServiceInfo#getServer()}
      */
     public String getServer() {
-        return event.getInfo().getServer();
+        return info.getServer();
     }
 
     /**
@@ -141,20 +142,17 @@ public class ShipService {
      * @return the underlying ServiceInfo object
      */
     public ServiceInfo getServiceInfo() {
-        return event.getInfo();
+        return info;
     }
 
     /**
      * @return all socket addresses for this SHIP service
      */
     public Set<InetSocketAddress> getSocketAddresses() {
-        return Arrays
-            .stream(event.getInfo().getInetAddresses())
-            .map(this::fixLinkLocal)
-            .map(address -> new InetSocketAddress(
-                address,
-                event.getInfo().getPort()
-            ))
+        return Stream
+            .of(getInet4SocketAddress(), inet6Socket)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
             .collect(Collectors.toSet());
     }
 
@@ -168,11 +166,11 @@ public class ShipService {
      */
     public Optional<InetSocketAddress> getInet4SocketAddress() {
         return Arrays
-            .stream(event.getInfo().getInet4Addresses())
+            .stream(info.getInet4Addresses())
             .findFirst()
             .map(inet4Address -> new InetSocketAddress(
                 inet4Address,
-                event.getInfo().getPort()
+                info.getPort()
             ));
     }
 
@@ -185,41 +183,11 @@ public class ShipService {
      * scope for SHIP, so we simply return the first identified address.
      */
     public Optional<InetSocketAddress> getInet6SocketAddress() {
-        return Arrays
-            .stream(event.getInfo().getInet6Addresses())
-            .findFirst()
-            .map(this::fixLinkLocal)
-            .map(inet6Address -> new InetSocketAddress(
-                inet6Address,
-                event.getInfo().getPort()
-            ));
-    }
-
-    private InetAddress fixLinkLocal(InetAddress address) {
-        if (address instanceof Inet6Address
-            && address.isLinkLocalAddress()
-            && ((Inet6Address) address).getScopedInterface() == null
-        ) {
-            try {
-                return Inet6Address.getByAddress(
-                    event.getInfo().getInet6Addresses()[0].getHostName(),
-                    event.getInfo().getInet6Addresses()[0].getAddress(),
-                    ((Inet6Address) event.getDNS().getInetAddress()).getScopeId()
-                );
-            }
-            catch (IOException e) {
-                LOG.warn(
-                    "There was an exception when trying to add a scope to a link-local IPv6 address. The address will probably not work: {}",
-                    address,
-                    e
-                );
-            }
-        }
-        return address;
+        return inet6Socket;
     }
 
     private String safelyReadRecord(String record) {
-        String content = event.getInfo().getPropertyString(record);
+        String content = info.getPropertyString(record);
         if (content == null || content.isBlank()) {
             throw new IllegalStateException("TXT record '"
                 + record
@@ -230,20 +198,50 @@ public class ShipService {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        @SuppressWarnings("QuestionableName")
+        ShipService that = (ShipService) o;
+        return Objects.equals(this.getSocketAddresses(), that.getSocketAddresses())
+            && Objects.equals(this.getShipId(), that.getShipId())
+            && Objects.equals(this.getSki(), that.getSki());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+            this.getSocketAddresses(),
+            this.getShipId(),
+            this.getSki()
+        );
+    }
+
+    @Override
+    public int compareTo(ShipService other) {
+        return Integer.compare(Objects.hashCode(this), Objects.hashCode(other));
+    }
+
+    @Override
     public String toString() {
         String delimiter = "\n\t";
-        return event.getInfo().getQualifiedName()
+        return info.getQualifiedName()
             + ":"
             + delimiter
-            + "addesses: "
+            + "addresses: "
             + getSocketAddresses()
             .stream()
             .map(ShipUtilities::beautify)
             .collect(Collectors.joining("; "))
+            + delimiter
+            + "server: "
+            + getServer()
             + Collections
-            .list(event.getInfo().getPropertyNames())
+            .list(info.getPropertyNames())
             .stream()
-            .map(prop -> prop + ": " + event.getInfo().getPropertyString(prop))
+            .map(prop -> prop + ": " + info.getPropertyString(prop))
             .collect(Collectors.joining(delimiter, delimiter, ""));
     }
 }

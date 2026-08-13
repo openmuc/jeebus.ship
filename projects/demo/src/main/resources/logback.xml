@@ -75,7 +75,9 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/${byMinute}_${sun.java.command}.log</file>
+        <file>logs/${byMinute}.log</file>
+        <!-- set immediateFlush to false for much higher logging throughput -->
+        <immediateFlush>true</immediateFlush>
         <encoder>
             <pattern>${patternPrefix} %msg%n</pattern>
         </encoder>
@@ -95,11 +97,8 @@
     <!--jmDNS may spam our logs with lengthy, internal, benign exception warnings-->
     <logger name="javax.jmdns" level="ERROR"/>
     <logger name="io.netty" level="INFO"/>
-    <logger name="org.openmuc.jeebus" level="INFO"/>
 
-    <root level="DEBUG">
-        <appender-ref ref="STDOUT"/>
-    </root>
+    <logger name="org.openmuc.jeebus" level="INFO"/>
 
     <logger name="org.openmuc.jeebus.ship" level="DEBUG"/>
 

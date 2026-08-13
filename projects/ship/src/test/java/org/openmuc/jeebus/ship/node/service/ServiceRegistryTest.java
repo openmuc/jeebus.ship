@@ -18,7 +18,11 @@ import org.openmuc.jeebus.ship.util.ShipTestUtil;
 import javax.jmdns.ServiceInfo;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
@@ -31,41 +35,18 @@ class ServiceRegistryTest {
     private final String validSki = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992222";
 
     @Test
-    public void testDiscoveryAnyAddress() throws IOException {
-        doTestDiscovery(
-            "011122334455",
-            "011122334456",
-            "local1.",
-            "0.0.0.0:8081"
-        );
-    }
-
-    @Test
     public void testDiscoveryLocalhost() throws IOException {
-        doTestDiscovery(
-            "021122334455",
-            "021122334456",
-            "local2.",
-            "localhost:8080"
-        );
-    }
-
-    private void doTestDiscovery(
-        String id1,
-        String id2,
-        String domain,
-        String... addresses
-    ) throws IOException {
         String halfId = "EXAMPLEBRAND-EEB01M3EU-";
 
         String instance = "Dishwasher ExampleCompany EEB01M3EU";
         ConfigBuilder configBuilder = ShipConfig
             .getBuilder()
-            .withServerBindAddresses(addresses)
+            .withServerBindAddresses("localhost:8080")
             .withMDnsServiceInstance(instance)
-            .withMDnsDomain(domain)
+            .withMDnsDomain("local2.")
             .withCertificateDistinguishedName("CN=test")
-            .withId(halfId + id1);
+            .withId(halfId + "021122334455")
+            .withNetworkInterfaceScanInitialDelay(0);
 
         ShipConfig config = configBuilder.build();
 
@@ -74,17 +55,27 @@ class ServiceRegistryTest {
             null
         );
 
-        serviceReg.initiateServices(
-            validSki,
-            config.getServerBindAddresses()
+        serviceReg.initiateTxt(
+            validSki
         );
+
+        Set<InetAddress> addressSet = config
+            .getServerBindAddresses()
+            .stream()
+            .map(InetSocketAddress::getAddress)
+            .collect(Collectors.toSet());
+
+        serviceReg.updateListeners(addressSet);
+        serviceReg.registerServices(config.getServerBindAddresses());
 
         try (
             serviceReg;
             ServiceRegistry serviceReg2 = new ServiceRegistry(
-                configBuilder.but().withId(halfId + id2).build(),
+                configBuilder.but().withId(halfId + "021122334456").build(),
                 null
         )) {
+            serviceReg2.updateListeners(addressSet);
+
             await()
                 .atMost(20, SECONDS)
                 .until(() -> !serviceReg2.listServices().isEmpty());

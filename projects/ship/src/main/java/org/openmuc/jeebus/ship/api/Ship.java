@@ -149,10 +149,10 @@ public class Ship implements ShipInterface, AutoCloseable {
      */
     public synchronized void addTrustedSki(String ski) {
         assertNodeAvailable();
-        if (ski != null && !ski.isEmpty()) {
+        if (KeyManagement.isValidSki(ski)) {
             KeyManagement.addTrustedSki(ski, 32);
-            synchronized (node.getServers()) {
-                node.getServers()
+            synchronized (node.getServer()) {
+                node.getServer()
                     .stream()
                     .map(ShipServer::getHandlers)
                     .flatMap(Collection::stream)
@@ -274,7 +274,7 @@ public class Ship implements ShipInterface, AutoCloseable {
         }
         node.getServiceRegistry().close();
         node.stopAllClients();
-        node.stopAllServers();
+        node.stopServer();
         log.info("SHIP was shut down");
     }
 

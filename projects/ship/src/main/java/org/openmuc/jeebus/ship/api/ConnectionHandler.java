@@ -42,9 +42,12 @@ public interface ConnectionHandler {
     void onDisconnect(DisconnectReason reason, ShipConnectionInterface shipConn);
 
     /**
-     * Called when a SHIP service is recognized and resolved. Use
+     * Called AT LEAST ONCE when a SHIP service is recognized and resolved. Use
      * {@link Ship#openConnection(InetSocketAddress, String)} to open a new client
      * connection to the SHIP server advertised in the service info.
+     * <p>
+     * This method might be called multiple times for the same device depending on
+     * the network configuration.
      *
      * @param service
      *     the complete SHIP mDNS Service Info with specialized access to its
