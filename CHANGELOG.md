@@ -30,6 +30,7 @@
 
 - Stop calling ConnectionHandler#serviceAdded when resolving the nodes own mDNS
   service
+- Fix trusted SKIs being stored statically
 
 ## [2.3.0] - 2026-07-09
 

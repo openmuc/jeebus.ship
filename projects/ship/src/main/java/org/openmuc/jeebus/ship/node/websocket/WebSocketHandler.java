@@ -150,8 +150,8 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     public int getTrustLevel() {
         int trustLevel = StaticConfiguration.getTrustLevel(node.consumeAutoAccept());
         String peerSki = getPeerSki();
-        if (KeyManagement.getTrustedSkis().containsKey(peerSki)) {
-            trustLevel = KeyManagement.getTrustedSkis().get(peerSki).getTrustLevel();
+        if (node.getKeyManagement().getTrustedSkis().containsKey(peerSki)) {
+            trustLevel = node.getKeyManagement().getTrustedSkis().get(peerSki).getTrustLevel();
         }
 
         log.info("Trust level of device with SKI {} is {}.", peerSki, trustLevel);

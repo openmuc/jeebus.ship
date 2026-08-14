@@ -31,7 +31,6 @@ import static org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD;
 
 @Execution(SAME_THREAD)
 public class KeyManagementTest {
-
     private final String keystoreAlias = "testKeys";
     private final char[] keystorePassphrase
         = "qyeditwsnj3k3l2sw7lt9sjlprahk1j0".toCharArray();
@@ -45,11 +44,11 @@ public class KeyManagementTest {
 
     @TempDir
     Path tempDir;
-    private KeyManagement km;
+    private KeyManagement testManagement;
 
     @BeforeEach
     public void setUp() throws CertificateStoreException {
-        km = new KeyManagement(
+        testManagement = new KeyManagement(
             new MemoryCertificateStorage(),
             dn,
             shipId,
@@ -59,7 +58,7 @@ public class KeyManagementTest {
 
     @AfterEach
     public void tearDown() {
-        KeyManagement.clearTrustedSkis();
+        testManagement.clearTrustedSkis();
     }
 
     @Test
@@ -90,65 +89,65 @@ public class KeyManagementTest {
 
     @Test
     public void test_trusted_SKI() {
-        KeyManagement.addTrustedSki(testSki, 32);
-        assertThat(KeyManagement.getTrustedSkis().size(), is(1));
+        testManagement.addTrustedSki(testSki, 32);
+        assertThat(testManagement.getTrustedSkis().size(), is(1));
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki).getTrustLevel(),
+            testManagement.getTrustedSkis().get(testSki).getTrustLevel(),
             is(32)
         );
 
         // adding the same ski twice should not override the previous entry
-        KeyManagement.addTrustedSki(testSki, 64);
-        assertThat(KeyManagement.getTrustedSkis().size(), is(1));
+        testManagement.addTrustedSki(testSki, 64);
+        assertThat(testManagement.getTrustedSkis().size(), is(1));
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki).getTrustLevel(),
+            testManagement.getTrustedSkis().get(testSki).getTrustLevel(),
             is(32)
         );
 
-        KeyManagement.addTrustedSki(testSki2, 64);
-        assertThat(KeyManagement.getTrustedSkis().size(), is(2));
+        testManagement.addTrustedSki(testSki2, 64);
+        assertThat(testManagement.getTrustedSkis().size(), is(2));
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki2).getTrustLevel(),
+            testManagement.getTrustedSkis().get(testSki2).getTrustLevel(),
             is(64)
         );
 
-        KeyManagement.removeTrustedSki(testSki);
-        assertThat(KeyManagement.getTrustedSkis().size(), is(1));
-        assertThat(KeyManagement.getTrustedSkis(), hasKey(testSki2));
+        testManagement.removeTrustedSki(testSki);
+        assertThat(testManagement.getTrustedSkis().size(), is(1));
+        assertThat(testManagement.getTrustedSkis(), hasKey(testSki2));
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki2).getTrustLevel(),
+            testManagement.getTrustedSkis().get(testSki2).getTrustLevel(),
             is(64)
         );
-        assertThat(KeyManagement.getTrustedSkis(), not(hasKey(testSki)));
+        assertThat(testManagement.getTrustedSkis(), not(hasKey(testSki)));
 
-        KeyManagement.addTrustedSki(testSki, 32);
-        KeyManagement.clearTrustedSkis();
-        assertThat(KeyManagement.getTrustedSkis().size(), is(0));
+        testManagement.addTrustedSki(testSki, 32);
+        testManagement.clearTrustedSkis();
+        assertThat(testManagement.getTrustedSkis().size(), is(0));
     }
 
     @Test
     public void test_authenticated_SKI() {
-        KeyManagement.addTrustedSki(testSki, 32);
+        testManagement.addTrustedSki(testSki, 32);
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki).isAuthenticated(),
+            testManagement.getTrustedSkis().get(testSki).isAuthenticated(),
             is(false)
         );
-        KeyManagement.addTrustedSki(testSki2, 64);
+        testManagement.addTrustedSki(testSki2, 64);
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki2).isAuthenticated(),
+            testManagement.getTrustedSkis().get(testSki2).isAuthenticated(),
             is(false)
         );
 
-        KeyManagement.setTrustedSkiAuthenticated(testSki);
+        testManagement.setTrustedSkiAuthenticated(testSki);
         assertThat(
-            KeyManagement.getTrustedSkis().get(testSki).isAuthenticated(),
+            testManagement.getTrustedSkis().get(testSki).isAuthenticated(),
             is(true)
         );
     }
 
     @Test
     public void test_cipher_suite() {
-        CertificateInfo certInfo = km.getCert();
+        CertificateInfo certInfo = testManagement.getCert();
         assertThat(certInfo, is(not(nullValue())));
         assertThat(certInfo.certificate, is(not(nullValue())));
         assertThat(certInfo.privateKey, is(not(nullValue())));

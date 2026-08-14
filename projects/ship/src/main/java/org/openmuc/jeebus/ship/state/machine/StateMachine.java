@@ -406,8 +406,10 @@ public class StateMachine implements StateHandlerContext {
 
     @Override
     public void setPeerSkiAuthenticated() {
-        // TODO get rid of this icky global state
-        KeyManagement.setTrustedSkiAuthenticated(shipConnection.getRemoteSki());
+        this.shipConnection
+            .getShipNodeContext()
+            .getKeyManagement()
+            .setTrustedSkiAuthenticated(shipConnection.getRemoteSki());
     }
 
     public synchronized void setCommPartnerTrusted() {

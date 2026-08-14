@@ -60,7 +60,8 @@ public class ShipServerHandler extends WebSocketHandler implements
             nodeContext.getConfig(),
             specificLogPrefix,
             nodeContext.getConnHandler(),
-            nodeContext.getOwnShipId()
+            nodeContext.getOwnShipId(),
+            this.node.getKeyManagement()
         );
 
         this.channel = ctx.channel();
