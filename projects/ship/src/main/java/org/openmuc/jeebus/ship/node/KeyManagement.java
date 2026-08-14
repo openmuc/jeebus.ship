@@ -40,6 +40,7 @@ import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
@@ -200,8 +201,11 @@ public class KeyManagement {
         return trustedSkis.remove(ski) != null;
     }
 
+    /**
+     * @return an unmodifiable view of the trusted SKI Map
+     */
     public Map<String, SkiManagementInfo> getTrustedSkis() {
-        return trustedSkis;
+        return Collections.unmodifiableMap(trustedSkis);
     }
 
     public void clearTrustedSkis() {
