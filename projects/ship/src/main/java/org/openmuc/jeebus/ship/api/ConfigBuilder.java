@@ -13,6 +13,7 @@ package org.openmuc.jeebus.ship.api;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
+import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.net.*;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -471,6 +473,16 @@ public final class ConfigBuilder {
                     + " and mDNS Service Discovery."
             );
         }
+        Set<String> invalidSkis = trustedSkis
+            .stream()
+            .filter(Predicate.not(KeyManagement::isValidSki))
+            .collect(Collectors.toSet());
+        if (!invalidSkis.isEmpty()) {
+            throw new IllegalStateException(
+                "There were invalid SKIs: " + invalidSkis
+            );
+        }
+
         return new ShipConfig(
             id,
             serverEnabled,
@@ -525,25 +537,4 @@ public final class ConfigBuilder {
             .findAny();
     }
 
-    private boolean safelyCheckMulticastSupport(NetworkInterface iface) {
-        boolean result = false;
-        try {
-            result = iface.supportsMulticast();
-        }
-        catch (SocketException e) {
-            LOG.warn(
-                "Exception checking whether interface {} supports multicast: ",
-                iface,
-                e
-            );
-        }
-        if (!result) {
-            LOG.debug(
-                "Network interface {} does not support multicast. It will be skipped"
-                    + " for server binding as well as mDNS Service Discovery.",
-                iface
-            );
-        }
-        return result;
-    }
 }

@@ -52,6 +52,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      */
     public Ship(ShipConfig nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
+        node.setClientConnectedListener(this::runConnectionDataPreparation);
     }
 
     /**

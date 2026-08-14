@@ -88,6 +88,7 @@ public class ShipNodeImpl {
                 nodeConfig.getId(),
                 nodeConfig.getCertificateValidity()
             );
+
             log.info(
                 "Key Management initialized. SKI of this node is {}",
                 keyManagement.getOwnSkiAsStr()
@@ -99,6 +100,9 @@ public class ShipNodeImpl {
             // if we don't exit here, there would be an NPE later anyway
             // best to fail-fast
         }
+
+        nodeConfig.getTrustedSkis()
+            .forEach(ski -> keyManagement.addTrustedSki(ski, 32));
 
         this.connHandler = connHandler;
 

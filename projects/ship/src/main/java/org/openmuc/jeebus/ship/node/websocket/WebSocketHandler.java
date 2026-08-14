@@ -214,7 +214,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                     nodeContext
                         .getConnHandler()
                         .onDisconnect(
-                            DisconnectReason.DUPLICATE_CONN,
+                            DisconnectReason.DOUBLE_CONNECTION,
                             connection.getApiShipConn()
                         );
                 }

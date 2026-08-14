@@ -33,7 +33,7 @@ public interface ShipConnectionInterface extends AutoCloseable {
     /**
      * @return the IP address of the communication partner
      *
-     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
+     * @deprecated since 2.3.0. The IP Address of remote nodes should be a
      * SHIP-internal detail, not part of the API.
      */
     @Deprecated(since = "2.3.0")

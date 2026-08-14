@@ -12,6 +12,7 @@
     - Immutable config object
   - Change `Ship#openConnection` to use `InetSocketAddress` and WSS path instead of
     address-strings
+  - Run SHIP `ConnectionDataPreparation` on new connected remote clients by default
 
 ### Added
 

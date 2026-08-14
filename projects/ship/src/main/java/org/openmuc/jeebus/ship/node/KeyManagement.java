@@ -168,11 +168,14 @@ public class KeyManagement {
                 "trust level should be a value between 8 and 96");
         }
         if (trustedSkis.containsKey(ski)) {
-            log.warn("The SKI {} is already in the list of trusted SKIs", ski);
+            log.debug(
+                "Ignoring call to trust SKI {}, as it is already trusted",
+                ski
+            );
         }
         else {
             trustedSkis.put(ski, new SkiManagementInfo(trustLevel));
-            log.info("added the SKI {} to the list of trusted SKIs", ski);
+            log.info("Trusting SKI {}", ski);
         }
     }
 
