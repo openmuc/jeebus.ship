@@ -354,4 +354,9 @@ public class KeyManagement {
         return cert;
     }
 
+    public boolean trusts(String remoteSki) {
+        return trustedSkis.containsKey(remoteSki)
+            && trustedSkis.get(remoteSki) != null
+            && trustedSkis.get(remoteSki).getTrustLevel() >= 8;
+    }
 }

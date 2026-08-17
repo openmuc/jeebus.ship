@@ -141,6 +141,15 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     /**
+     * @param remoteSki
+     *     the Subject Key Identifier (SKI) of the remote SHIP note in question
+     * @return true if the trust level for the given SKI is &ge; 8.
+     */
+    public boolean trusts(String remoteSki) {
+        return node.getKeyManagement().trusts(remoteSki);
+    }
+
+    /**
      * adding a SKI authenticates the SHIP node using that SKI. The SKI of other SHIP
      * nodes is typically communicated through the {@link ConnectionHandler} or
      * manually acquired through {@link ShipConnectionInterface}
