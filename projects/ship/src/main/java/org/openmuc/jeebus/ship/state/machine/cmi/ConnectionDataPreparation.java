@@ -14,11 +14,13 @@ import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
 import org.openmuc.jeebus.ship.state.machine.StateHandlerContext;
 
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
+
 @StateHandler.Handles(State.CONNECTION_DATA_PREPARATION)
 public class ConnectionDataPreparation implements StateHandler {
     @Override
     public void onEntered(State previous, StateHandlerContext context) {
-        if (context.requireTrust(8)) {
+        if (context.requireTrust(MINIMAL_TRUST_LEVEL)) {
             context.transitionTo(State.SME_HELLO_STATE_READY_INIT);
         } else {
             context.transitionTo(State.SME_HELLO_STATE_PENDING_INIT);

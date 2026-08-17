@@ -10,7 +10,7 @@
 
 package org.openmuc.jeebus.ship.state.machine;
 
-import org.openmuc.jeebus.ship.node.StaticConfiguration;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.view.UserInterface;
 
 import java.util.concurrent.TimeUnit;
@@ -125,7 +125,7 @@ public interface StateHandlerContext {
     /**
      * @return the configuration for this node
      */
-    StaticConfiguration getConfig();
+    ShipNodeParameters getConfig();
 
     /**
      * @return the interface to prompt the user about some action

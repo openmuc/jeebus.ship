@@ -26,6 +26,8 @@
 ### Removed
 
 - discontinued the `ship-cli` subproject
+- removed `ShipNodeConfiguration` in favor of `ConfigBuilder`
+- removed property parsing from `resources/config.properties`
 
 ### Fixed
 

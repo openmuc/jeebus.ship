@@ -10,8 +10,7 @@
 
 package org.openmuc.jeebus.ship.state.machine;
 
-import org.openmuc.jeebus.ship.node.StaticConfiguration;
-import org.openmuc.jeebus.ship.node.KeyManagement;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.view.UserInterface;
 import org.slf4j.Logger;
@@ -46,6 +45,10 @@ public class StateMachine implements StateHandlerContext {
     private transient State pendingNext;
     private transient Microstate _microstate = Microstate.NORMAL;
 
+    public static int getCmiTimeoutVal(int cmiTimeoutVal) {
+        return cmiTimeoutVal;
+    }
+
     private enum Microstate {
         NORMAL,
         EXITING,
@@ -55,7 +58,7 @@ public class StateMachine implements StateHandlerContext {
     private final boolean isServer;
     protected final ShipConnection shipConnection;
     private final UserInterface userInterface;
-    private final StaticConfiguration config;
+    private final ShipNodeParameters config;
     private byte[] pendingMessage;
 
     protected ScheduledExecutorService timeoutExecutor
@@ -79,7 +82,7 @@ public class StateMachine implements StateHandlerContext {
     public StateMachine(
         ShipConnection shipConnection,
         UserInterface userInterface,
-        StaticConfiguration config,
+        ShipNodeParameters config,
         State initial,
         Object extraData
     ) {
@@ -96,7 +99,7 @@ public class StateMachine implements StateHandlerContext {
     public StateMachine(
         ShipConnection shipConnection,
         UserInterface userInterface,
-        StaticConfiguration config
+        ShipNodeParameters config
     ) {
         this(shipConnection, userInterface, config, null, null);
     }
@@ -221,16 +224,16 @@ public class StateMachine implements StateHandlerContext {
         shipConnection.closeImmediately();
     }
 
-    public StaticConfiguration getConfig() {
+    public ShipNodeParameters getConfig() {
         return config;
     }
 
     public int getDefaultTimeoutSeconds(SpecifiedTimeout which) {
         switch (which) {
             case CMI_TIMEOUT:
-                return config.getCmiTimeoutVal();
+                return getCmiTimeoutVal(config.CMI_TIMEOUT);
             case SME_WAIT_FOR_READY:
-                return config.getT_hello_init();
+                return ShipNodeParameters.T_HELLO_INIT;
             case SME_SEND_PROLONGATION_REQUEST:
             case SME_PROLONGATION_REQUEST_REPLY:
                 LOGGER.warn(

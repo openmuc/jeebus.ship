@@ -38,6 +38,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.openmuc.jeebus.ship.node.KeyManagement.encodeSkiAsString;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
+
 public class ShipNodeImpl {
 
     protected static final Logger log = LoggerFactory.getLogger(ShipNodeImpl.class);
@@ -59,7 +61,7 @@ public class ShipNodeImpl {
 
     private final SslContextFactory sslContextFactory;
 
-    private final StaticConfiguration staticConfig;
+    private final ShipNodeParameters staticConfig;
 
     private final ServiceRegistry serviceRegistry;
 
@@ -102,7 +104,7 @@ public class ShipNodeImpl {
         }
 
         nodeConfig.getTrustedSkis()
-            .forEach(ski -> keyManagement.addTrustedSki(ski, 32));
+            .forEach(ski -> keyManagement.addTrustedSki(ski, USER_VERIFIED_TRUST_LEVEL));
 
         this.connHandler = connHandler;
 
@@ -110,7 +112,7 @@ public class ShipNodeImpl {
         // server initiated renegotiation is not supported by netty as of version 4.1
         System.setProperty("jdk.tls.rejectClientInitiatedRenegotiation", "true");
 
-        staticConfig = new StaticConfiguration();
+        staticConfig = new ShipNodeParameters();
 
         sslContextFactory = new SslContextFactory();
 
@@ -145,6 +147,10 @@ public class ShipNodeImpl {
             this,
             nodeConfig
         );
+    }
+
+    public static int getAutoAcceptWindow(int autoAcceptWindow) {
+        return autoAcceptWindow;
     }
 
     public Set<WebSocketHandler> getAllWebSocketHandlers() {
@@ -276,7 +282,8 @@ public class ShipNodeImpl {
         if (autoAcceptTimeout == null) {
             serviceRegistry.toggleRegisterFlag();
 
-            int autoAcceptWindow = getStaticConfig().getAutoAcceptWindow();
+            int autoAcceptWindow = getAutoAcceptWindow(
+                getStaticConfig().AUTO_ACCEPT_WINDOW);
             log.info(
                 "SHIP node starting auto accept mode, it will last for {} seconds",
                 autoAcceptWindow
@@ -346,7 +353,7 @@ public class ShipNodeImpl {
         return keyManagement;
     }
 
-    public StaticConfiguration getStaticConfig() {
+    public ShipNodeParameters getStaticConfig() {
         return this.staticConfig;
     }
 

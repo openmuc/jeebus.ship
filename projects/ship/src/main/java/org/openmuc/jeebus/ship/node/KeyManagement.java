@@ -46,6 +46,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MAXIMAL_TRUST_LEVEL;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
+
 /**
  * everything related to key management and key encryption
  */
@@ -163,19 +166,16 @@ public class KeyManagement {
         if (!isValidSki(ski)) {
             throw new IllegalArgumentException("SKI is invalid");
         }
-        if (trustLevel < 8 || trustLevel > 96) {
+        if (trustLevel < MINIMAL_TRUST_LEVEL || trustLevel > MAXIMAL_TRUST_LEVEL) {
             throw new IllegalArgumentException(
-                "trust level should be a value between 8 and 96");
-        }
-        if (trustedSkis.containsKey(ski)) {
-            log.debug(
-                "Ignoring call to trust SKI {}, as it is already trusted",
-                ski
-            );
+                "trust level should be a value between "
+                    + MINIMAL_TRUST_LEVEL
+                    + " and "
+                    + MAXIMAL_TRUST_LEVEL);
         }
         else {
             trustedSkis.put(ski, new SkiManagementInfo(trustLevel));
-            log.info("Trusting SKI {}", ski);
+            log.info("Updating trust level for SKI {} to {}", ski, trustLevel);
         }
     }
 
@@ -185,7 +185,7 @@ public class KeyManagement {
         }
         else {
             throw new IllegalArgumentException(
-                "SKI to authenticate should be in the trusted SKIs list");
+                "SKI to authenticate must be in the trusted SKIs list");
         }
     }
 
@@ -357,6 +357,6 @@ public class KeyManagement {
     public boolean trusts(String remoteSki) {
         return trustedSkis.containsKey(remoteSki)
             && trustedSkis.get(remoteSki) != null
-            && trustedSkis.get(remoteSki).getTrustLevel() >= 8;
+            && trustedSkis.get(remoteSki).getTrustLevel() >= MINIMAL_TRUST_LEVEL;
     }
 }

@@ -18,7 +18,7 @@ public class ShipNodeContext {
 
     private final KeyManagement keyManagement;
 
-    private StaticConfiguration config;
+    private ShipNodeParameters config;
 
     private String logPrefix;
 
@@ -26,7 +26,7 @@ public class ShipNodeContext {
 
     public ShipNodeContext(
         KeyManagement keyManagement,
-        StaticConfiguration config,
+        ShipNodeParameters config,
         String ownShipId
     ) {
         this.keyManagement = keyManagement;
@@ -35,7 +35,7 @@ public class ShipNodeContext {
     }
 
     public ShipNodeContext(
-        StaticConfiguration config,
+        ShipNodeParameters config,
         String logPrefix,
         ConnectionHandler connHandler,
         String ownShipId,
@@ -52,11 +52,11 @@ public class ShipNodeContext {
         return this.keyManagement;
     }
 
-    public StaticConfiguration getConfig() {
+    public ShipNodeParameters getConfig() {
         return config;
     }
 
-    public void setConfig(StaticConfiguration config) {
+    public void setConfig(ShipNodeParameters config) {
         this.config = config;
     }
 

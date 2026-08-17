@@ -18,7 +18,7 @@ import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.CloseMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
-import org.openmuc.jeebus.ship.node.StaticConfiguration;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
@@ -38,6 +38,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.openmuc.jeebus.ship.message.connectionclose.ConnectionClosePhaseType.CONFIRM;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
 
 // TODO replace usages of ShipConnectionImpl with ShipConnection (or other interface)
 public class ShipConnectionImpl implements ShipConnection {
@@ -98,8 +99,7 @@ public class ShipConnectionImpl implements ShipConnection {
         } else {
             forcedTrustLevel = -1;
         }
-        // minimum trust level is 8
-        this.trustCommPartner = trustLevel >= 8;
+        this.trustCommPartner = trustLevel >= MINIMAL_TRUST_LEVEL;
         this.nodeContext = nodeContext;
 
         this.connection = connection;
@@ -246,19 +246,21 @@ public class ShipConnectionImpl implements ShipConnection {
     }
 
     /**
-     * Set the communication partner to be trusted, allowing communication to proceed.
+     * Set the communication partner to be trusted, allowing communication to
+     * proceed.
      * <p>
-     * This is only allowed if the trust level for this connection is &ge;8.
+     * This is only allowed if the trust level for this connection is &ge;
+     * {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
      */
     public void trustCommPartner() {
-        // minimum trust level for communication is 8 (auto accepted connections)
-        if (getTrustLevel() < 8) {
+        if (getTrustLevel() < MINIMAL_TRUST_LEVEL) {
             LOGGER.error(
-                "{}: trust level should be higher than 8 to proceed",
-                getLogPrefix()
+                "{}: trust level should be higher than {} to proceed",
+                getLogPrefix(),
+                MINIMAL_TRUST_LEVEL
             );
             throw new IllegalStateException(
-                "trust level should be higher than 8 to proceed");
+                "trust level should be higher than "+MINIMAL_TRUST_LEVEL+" to proceed");
         }
         this.trustCommPartner = true;
         stateMachine.setCommPartnerTrusted();
@@ -324,7 +326,7 @@ public class ShipConnectionImpl implements ShipConnection {
         return this.nodeContext;
     }
 
-    public StaticConfiguration getConfig() {
+    public ShipNodeParameters getConfig() {
         return nodeContext.getConfig();
     }
 

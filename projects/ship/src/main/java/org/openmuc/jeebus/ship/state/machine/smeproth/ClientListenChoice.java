@@ -14,7 +14,7 @@ import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.smeproth.ProtHError;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeMsg;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
-import org.openmuc.jeebus.ship.node.StaticConfiguration;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
 import org.openmuc.jeebus.ship.state.machine.StateHandlerContext;
@@ -29,7 +29,7 @@ public class ClientListenChoice implements StateHandler {
 
     @Override
     public void processMessage(byte[] msg, StateHandlerContext context) {
-        StaticConfiguration config = context.getConfig();
+        ShipNodeParameters config = context.getConfig();
         ProtocolHandshakeMsg choice
             = MessageUtility.preprocessProtHMsg(msg);
         if (!SmeProtH.isValidMsg(ProtocolHandshakeTypeType.SELECT, choice)) {
@@ -37,10 +37,10 @@ public class ClientListenChoice implements StateHandler {
             return;
         }
         if (choice.getFormats().size() == 1
-            && config.getSupportedFormats().contains(choice.getFormats().get(0))
-            && (choice.getMajor() < config.getMajor()
-            || choice.getMajor() == config.getMajor()
-            && choice.getMinor() <= config.getMinor())
+            && ShipNodeParameters.SUPPORTED_FORMATS.contains(choice.getFormats().get(0))
+            && (choice.getMajor() < ShipNodeParameters.MAJOR_VERSION
+            || choice.getMajor() == ShipNodeParameters.MAJOR_VERSION
+            && choice.getMinor() <= ShipNodeParameters.MINOR_VERSION)
         ) {
             context.sendMessage(msg);
             context.transitionTo(State.SME_PROT_H_STATE_CLIENT_OK);

@@ -15,7 +15,7 @@ import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.smeproth.ProtHError;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeMsg;
 import org.openmuc.jeebus.ship.message.smeproth.ProtocolHandshakeTypeType;
-import org.openmuc.jeebus.ship.node.StaticConfiguration;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.state.machine.SpecifiedTimeout;
 import org.openmuc.jeebus.ship.state.machine.State;
 import org.openmuc.jeebus.ship.state.machine.StateHandler;
@@ -64,9 +64,9 @@ public class ServerListenProposal implements StateHandler {
         ProtocolHandshakeMsg proposal,
         StateHandlerContext context
     ) {
-        StaticConfiguration config = context.getConfig();
+        ShipNodeParameters config = context.getConfig();
         HashSet<String> supportedFormats
-            = new HashSet<>(config.getSupportedFormats());
+            = new HashSet<>(ShipNodeParameters.SUPPORTED_FORMATS);
         Optional<String> foundFormat = proposal
             .getFormats()
             .stream()
@@ -83,17 +83,17 @@ public class ServerListenProposal implements StateHandler {
         // then we select <1, 3> and assume the communication partner can deal with this.
         int selectedMajor;
         int selectedMinor;
-        if (config.getMajor() > proposal.getMajor()) {
+        if (ShipNodeParameters.MAJOR_VERSION > proposal.getMajor()) {
             selectedMajor = proposal.getMajor();
             selectedMinor = proposal.getMinor();
         }
-        else if (config.getMajor() < proposal.getMajor()) {
-            selectedMajor = config.getMajor();
-            selectedMinor = config.getMinor();
+        else if (ShipNodeParameters.MAJOR_VERSION < proposal.getMajor()) {
+            selectedMajor = ShipNodeParameters.MAJOR_VERSION;
+            selectedMinor = ShipNodeParameters.MINOR_VERSION;
         }
         else { // ==
-            selectedMajor = config.getMajor();
-            selectedMinor = Math.min(config.getMinor(), proposal.getMinor());
+            selectedMajor = ShipNodeParameters.MAJOR_VERSION;
+            selectedMinor = Math.min(ShipNodeParameters.MINOR_VERSION, proposal.getMinor());
         }
         return new ProtocolHandshakeMsg(
             ProtocolHandshakeTypeType.SELECT,

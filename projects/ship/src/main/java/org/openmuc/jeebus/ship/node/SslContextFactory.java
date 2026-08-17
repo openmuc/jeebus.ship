@@ -35,8 +35,20 @@ public class SslContextFactory {
     private TrustManager[] trustManagers;
 
     public SslContextFactory() {
-        this.PROTOCOLS = StaticConfiguration.getProtocols();
-        this.CIPHERS = StaticConfiguration.getCiphers();
+        this.PROTOCOLS = getProtocols();
+        this.CIPHERS = getCiphers();
+    }
+
+    public static List<String> getProtocols() {
+        return ShipNodeParameters.PROTOCOLS;
+    }
+
+    public static List<String> getCiphers() {
+        return ShipNodeParameters.CIPHERS;
+    }
+
+    public static List<String> getWell_knownProtocolId() {
+        return ShipNodeParameters.WELL_KNOWN_PROTOCOL_ID;
     }
 
     public SslContext generateServerSslContext(CertificateInfo cert) throws

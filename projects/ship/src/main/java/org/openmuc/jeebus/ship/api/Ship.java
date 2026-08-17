@@ -13,6 +13,7 @@ package org.openmuc.jeebus.ship.api;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
@@ -33,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class Ship implements ShipInterface, AutoCloseable {
@@ -143,7 +145,7 @@ public class Ship implements ShipInterface, AutoCloseable {
     /**
      * @param remoteSki
      *     the Subject Key Identifier (SKI) of the remote SHIP note in question
-     * @return true if the trust level for the given SKI is &ge; 8.
+     * @return true if the trust level for the given SKI is &ge; {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
      */
     public boolean trusts(String remoteSki) {
         return node.getKeyManagement().trusts(remoteSki);
@@ -160,7 +162,7 @@ public class Ship implements ShipInterface, AutoCloseable {
     public synchronized void addTrustedSki(String ski) {
         assertNodeAvailable();
         if (KeyManagement.isValidSki(ski)) {
-            node.getKeyManagement().addTrustedSki(ski, 32);
+            node.getKeyManagement().addTrustedSki(ski, USER_VERIFIED_TRUST_LEVEL);
             synchronized (node.getServer()) {
                 node.getServer()
                     .stream()

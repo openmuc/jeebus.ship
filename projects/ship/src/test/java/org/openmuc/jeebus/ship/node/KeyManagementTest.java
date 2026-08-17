@@ -101,7 +101,7 @@ public class KeyManagementTest {
         assertThat(testManagement.getTrustedSkis().size(), is(1));
         assertThat(
             testManagement.getTrustedSkis().get(testSki).getTrustLevel(),
-            is(32)
+            is(64)
         );
 
         testManagement.addTrustedSki(testSki2, 64);
