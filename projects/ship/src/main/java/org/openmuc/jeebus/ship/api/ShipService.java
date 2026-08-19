@@ -11,11 +11,8 @@
 package org.openmuc.jeebus.ship.api;
 
 import org.openmuc.jeebus.ship.util.ShipUtilities;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
-import java.lang.invoke.MethodHandles;
 import java.net.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,10 +25,6 @@ import java.util.stream.Stream;
  * @see "SHIP:7 Discovery"
  */
 public class ShipService implements Comparable<ShipService> {
-
-    private static final Logger LOG = LoggerFactory.getLogger(
-        MethodHandles.lookup().lookupClass()
-    );
 
     private final ServiceInfo info;
     private final Optional<InetSocketAddress> inet6Socket;
@@ -198,13 +191,13 @@ public class ShipService implements Comparable<ShipService> {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) {
+    public boolean equals(Object other) {
+        if (other == null || getClass() != other.getClass()) {
             return false;
         }
 
         @SuppressWarnings("QuestionableName")
-        ShipService that = (ShipService) o;
+        ShipService that = (ShipService) other;
         return Objects.equals(this.getSocketAddresses(), that.getSocketAddresses())
             && Objects.equals(this.getShipId(), that.getShipId())
             && Objects.equals(this.getSki(), that.getSki());

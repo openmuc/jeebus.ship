@@ -260,10 +260,20 @@ public class Ship implements ShipInterface, AutoCloseable {
      * returns a set with all detected services, including own service
      *
      * @return the set with all detected services
+     * @deprecated since 3.0.0. Please use {@link Ship#getCurrentServices}
      */
+    @Deprecated(since = "3.0.0", forRemoval = true)
     public Set<ServiceInfo> getServices() {
         assertNodeAvailable();
         return node.getServiceRegistry().listServices();
+    }
+
+    /**
+     * @return a Set containing all resolved ShipServices except this node's servcices
+     */
+    public Set<ShipService> getCurrentServices() {
+        assertNodeAvailable();
+        return node.getServiceRegistry().getCurrentServices();
     }
 
     /**

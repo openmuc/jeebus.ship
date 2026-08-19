@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.node.service;
 
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
+import org.openmuc.jeebus.ship.api.Ship;
 import org.openmuc.jeebus.ship.api.ShipService;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
@@ -188,11 +189,24 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
      * lists all identified services found across all active network interfaces.
      *
      * @return identified services
+     * @deprecated since 3.0.0. Please use {@link ServiceRegistry#getCurrentServices}
      */
+    @Deprecated(since = "3.0.0", forRemoval = true)
     public Set<ServiceInfo> listServices() {
         return addressJmDNSMap.values()
             .stream()
             .flatMap(j -> Arrays.stream(j.list(serviceType)))
+            .collect(Collectors.toSet());
+    }
+
+    public Set<ShipService> getCurrentServices() {
+        return addressJmDNSMap
+            .values()
+            .stream()
+            .flatMap(dns -> Arrays
+                .stream(dns.list(serviceType))
+                .map(info -> new ShipService(info, fixLinkLocal(info, dns))))
+            .filter(Predicate.not(this::isUs))
             .collect(Collectors.toSet());
     }
 
@@ -348,10 +362,10 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
             && Objects.equals(service.getShipId(), ownTxt.getId());
     }
 
-    private Optional<Inet6Address> fixLinkLocal(ServiceEvent event) {
+    private Optional<Inet6Address> fixLinkLocal(ServiceInfo info, JmDNS dns) {
 
         Optional<Inet6Address> inet6 = Arrays
-            .stream(event.getInfo().getInet6Addresses())
+            .stream(info.getInet6Addresses())
             .findFirst();
 
         if (inet6.isPresent()
@@ -359,7 +373,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
             && inet6.get().getScopedInterface() == null
         ) {
             try {
-                InetAddress dnsAddress = event.getDNS().getInetAddress();
+                InetAddress dnsAddress = dns.getInetAddress();
 
                 if (dnsAddress instanceof Inet6Address) {
                     Set<Integer> associatedScopes = addressJmDNSMap
@@ -386,6 +400,10 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
             }
         }
         return inet6;
+    }
+
+    private Optional<Inet6Address> fixLinkLocal(ServiceEvent event) {
+        return fixLinkLocal(event.getInfo(), event.getDNS());
     }
 
     @Override
