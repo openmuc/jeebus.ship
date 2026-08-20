@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
 
 import static org.openmuc.jeebus.ship.message.connectionclose.ConnectionClosePhaseType.CONFIRM;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
@@ -75,6 +76,9 @@ public class ShipConnectionImpl implements ShipConnection {
 
     // when not null, Connection Data Exchange is enabled
     private ConnectionDataExchange cde;
+
+    // Future to be completed when connection is established
+    private CompletableFuture<ShipConnectionInterface> connectionFuture;
     /**
      * stores outgoing CDE messages while CDE is not yet enabled.
      * they are sent immediately when CDE is enabled.
@@ -94,12 +98,12 @@ public class ShipConnectionImpl implements ShipConnection {
     private final CloseHandler closeHandler = new CloseHandler(this);
 
     public ShipConnectionImpl(
-        boolean server,
+        Role role,
         int trustLevel,
         ShipNodeContext nodeContext,
         WebSocketHandler webSocketHandler
     ) {
-        this.role = server ? Role.SERVER : Role.CLIENT;
+        this.role = role;
         if (trustLevel > 0) {
             forcedTrustLevel = trustLevel;
         } else {
@@ -336,7 +340,14 @@ public class ShipConnectionImpl implements ShipConnection {
 
     public void connectionEstablished() {
         if(amiTimeout.cancel(false) && nodeContext.getConnHandler() != null) {
-            nodeContext.getConnHandler().connectionEstablished(this);
+            // Complete the future if it exists
+            if (connectionFuture != null && !connectionFuture.isDone()) {
+                connectionFuture.complete(this);
+            }
+            // If it doesn't, we must be a server
+            else {
+                nodeContext.getConnHandler().connectionEstablished(this);
+            }
 
             while (!incomingCdeQueue.isEmpty()) {
                 cde.processMsg(incomingCdeQueue.poll());
@@ -370,6 +381,10 @@ public class ShipConnectionImpl implements ShipConnection {
                 outgoingCdeQueue.add(cdeMsg);
             }
         }
+    }
+
+    public void setConnectionFuture(CompletableFuture<ShipConnectionInterface> connectionFuture) {
+        this.connectionFuture = connectionFuture;
     }
 
     @Override

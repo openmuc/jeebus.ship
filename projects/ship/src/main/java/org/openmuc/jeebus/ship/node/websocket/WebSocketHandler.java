@@ -190,6 +190,11 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return (InetSocketAddress) channel.remoteAddress();
     }
 
+    /**
+     * TODO: change this procedure so we immediately switch to the surviving
+     *  connection, because we know which one that is by SKI comparison
+     * @param peerSki
+     */
     protected synchronized void doubleConnProcedure(String peerSki) {
         if (node.isDoubleConnection(peerSki)) {
             log.warn("{}: double connection detected", nodeContext.getLogPrefix());
@@ -198,7 +203,6 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                 // own ski is bigger
                 node.closeDoubleConns(this);
                 if (nodeContext.getConnHandler() != null && connection != null) {
-                    // TODO: The connection should not even be announced to the
                     nodeContext
                         .getConnHandler()
                         .onDisconnect(

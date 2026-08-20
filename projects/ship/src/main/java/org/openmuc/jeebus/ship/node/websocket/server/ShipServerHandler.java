@@ -26,6 +26,7 @@ import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import java.net.InetSocketAddress;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
+import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.SERVER;
 
 public class ShipServerHandler extends WebSocketHandler {
 
@@ -164,7 +165,7 @@ public class ShipServerHandler extends WebSocketHandler {
                 doubleConnProcedure(this.getPeerSki());
             }
             connection = new ShipConnectionImpl(
-                true,
+                SERVER,
                 getTrustLevel(),
                 nodeContext,
                 this

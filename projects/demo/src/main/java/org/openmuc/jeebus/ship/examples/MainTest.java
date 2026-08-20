@@ -17,11 +17,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
 
 public class MainTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(MainTest.class);
@@ -127,10 +127,13 @@ public class MainTest {
         Instant openConnection = Instant.now();
         LOGGER.info("Opening connection...");
 
-        ShipConnectionInterface shipConnInterface = ship2.openConnection(
+        CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship2.openConnection(
             new InetSocketAddress("localhost", 8080),
             "ship"
         );
+
+        // Wait for the connection to be established
+        ShipConnectionInterface shipConnInterface = shipConnectionFuture.join();
 
         Instant connectionReady = Instant.now();
         LOGGER.info("Connection ready, sending test message...");

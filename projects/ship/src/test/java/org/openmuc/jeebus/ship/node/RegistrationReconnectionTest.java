@@ -28,6 +28,7 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD;
 import static org.mockito.Mockito.when;
+import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 
 @Execution(SAME_THREAD)
 @ExtendWith(MockitoExtension.class)
@@ -63,7 +64,7 @@ public class RegistrationReconnectionTest {
 
     @Test
     public void test_registration() {
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, webSocketHandler);
+        exampleConn = new ShipConnectionImpl(CLIENT, 0, exampleCtx, webSocketHandler);
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
 
         KeyManagement keyManagement = exampleCtx.getKeyManagement();
@@ -79,7 +80,7 @@ public class RegistrationReconnectionTest {
         KeyManagement keyManagement = exampleCtx.getKeyManagement();
 
         keyManagement.setTrustedSkiAuthenticated(exampleSki);
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, webSocketHandler);
+        exampleConn = new ShipConnectionImpl(CLIENT, 0, exampleCtx, webSocketHandler);
         // see issue #61 in gitlab, for now leave the authenticated flag in, in case it is needed in the future
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
 

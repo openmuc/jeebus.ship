@@ -27,6 +27,8 @@ import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
 import java.net.InetSocketAddress;
 
+import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
+
 public class ShipClientHandler extends WebSocketHandler {
 
     private final WebSocketClientHandshaker handshaker;
@@ -88,7 +90,7 @@ public class ShipClientHandler extends WebSocketHandler {
                 doubleConnProcedure(this.getPeerSki());
             }
             this.connection = new ShipConnectionImpl(
-                false,
+                CLIENT,
                 getTrustLevel(),
                 nodeContext,
                 this

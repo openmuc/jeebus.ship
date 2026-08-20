@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.api;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.CompletableFuture;
 
 public interface ShipInterface {
 
@@ -39,10 +40,11 @@ public interface ShipInterface {
      * @param path
      *     the WSS path to the SHIP server. Use {@link ShipService#getPath()} to find
      *     the path for a resolved SHIP service.
-     * @return an Interface to represent this particular connection to another SHIP
-     * node
+     * @return a CompletableFuture that completes with an Interface to represent this
+     * particular connection to another SHIP node, or fails if the connection attempt
+     * was unsuccessful
      */
-    ShipConnectionInterface openConnection(
+    CompletableFuture<ShipConnectionInterface> openConnection(
         InetSocketAddress socket,
         String path
     );

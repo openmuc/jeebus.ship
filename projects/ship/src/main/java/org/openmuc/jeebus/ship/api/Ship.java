@@ -31,6 +31,8 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -60,24 +62,30 @@ public class Ship implements ShipInterface, AutoCloseable {
 
     @Override
     public ShipConnectionInterface openConnection(String ipAddr) {
-        return openConnection(
-            safelyParseSocketAddress(ipAddr),
-            "ship"
-        );
+        try {
+            return openConnection(
+                safelyParseSocketAddress(ipAddr),
+                "ship"
+            ).get();
+        }
+        catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return an object representing the connection to the device/server if the
-     * connection was successful, else {@code null}
+     * @return a CompletableFuture that completes with the connection to the
+     * device/server if the connection was successful, or fails if the connection
+     * attempt was unsuccessful
      * @implNote If a connection with the given SHIP node already exists, that
-     * {@link ShipConnectionInterface} is returned instead of opening a new
-     * connection. The reason for this behavior is that we want to avoid double
-     * connections, as they are always messy and unreliable to handle.
+     * {@link ShipConnectionInterface} is returned immediately in a completed
+     * Future. The reason for this behavior is that we want to avoid
+     * double connections, as they are always messy and unreliable to handle.
      */
     @Override
-    public ShipConnectionInterface openConnection(
+    public CompletableFuture<ShipConnectionInterface> openConnection(
         InetSocketAddress socket,
         String path
     ) {
@@ -91,25 +99,37 @@ public class Ship implements ShipInterface, AutoCloseable {
                 "Reusing existing connection to {}",
                 beautify(socket)
             );
-            return existingConnection.get().getApiShipConnection();
+            return CompletableFuture.completedFuture(existingConnection
+                .get()
+                .getApiShipConnection());
         }
 
-        ShipClient client = node.createClient(socket, path);
-        ShipClientHandler clientHandler = client.getHandler();
+        CompletableFuture<ShipConnectionInterface> connectionFuture
+            = new CompletableFuture<>();
+
         try {
+            ShipClient client = node.createClient(socket, path);
+            ShipClientHandler clientHandler = client.getHandler();
+
             if (!clientHandler.isShipConnRdy(5)) {
-                throw new IllegalStateException(
-                    "ShipConnection not ready in time");
+                throw new IllegalStateException("ShipConnection not ready in time");
             }
+
+            ShipConnectionImpl connection = clientHandler.getConnection();
+            connection.setConnectionFuture(connectionFuture);
+            runConnectionDataPreparation(connection);
         }
         catch (InterruptedException e) {
-            log.error(e.getMessage());
+            log.error("Interrupted while establishing a connection:", e);
             Thread.currentThread().interrupt();
+            connectionFuture.completeExceptionally(e);
         }
-        ShipConnectionImpl connection = clientHandler.getConnection();
-        runConnectionDataPreparation(connection);
+        catch (Exception e) {
+            log.error("Failed to establish connection:", e);
+            connectionFuture.completeExceptionally(e);
+        }
 
-        return connection.getApiShipConnection();
+        return connectionFuture;
     }
 
     private Optional<ShipConnectionImpl> getExistingConnection(
@@ -138,9 +158,9 @@ public class Ship implements ShipInterface, AutoCloseable {
         if (connection == null) {
             throw new IllegalArgumentException("connection object should not be null");
         }
-        ExecutorService exec = Executors.newSingleThreadExecutor(namedThreadFactory);
-        exec.execute(connection::initState);
-        exec.shutdown();
+        ExecutorService executor = Executors.newSingleThreadExecutor(namedThreadFactory);
+        executor.execute(connection::initState);
+        executor.shutdown();
     }
 
     public String getOwnSki() {
@@ -151,7 +171,8 @@ public class Ship implements ShipInterface, AutoCloseable {
     /**
      * @param remoteSki
      *     the Subject Key Identifier (SKI) of the remote SHIP note in question
-     * @return true if the trust level for the given SKI is &ge; {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
+     * @return true if the trust level for the given SKI is &ge;
+     * {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
      */
     public boolean trusts(String remoteSki) {
         return node.getKeyManagement().trusts(remoteSki);
@@ -234,7 +255,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      * clients have a time window of 1 to 120 seconds for the connection The default
      * value for the window is 60 seconds. If the time window passed without any
      * client connecting, the auto-accept-mode will be turned off.
-     * <p>
+     *
      * @deprecated since 2.3.0. Usage of the auto accept mode is discouraged by the
      * EEBus Initiative and most stack implementers. Experience has shown even one
      * device in auto accept mode makes setting up working EEBus networks hard and
@@ -268,14 +289,16 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @return the set with all detected services
      * @deprecated since 3.0.0. Please use {@link Ship#getCurrentServices}
      */
-    @Deprecated(since = "3.0.0", forRemoval = true)
+    @Deprecated(since = "3.0.0",
+        forRemoval = true)
     public Set<ServiceInfo> getServices() {
         assertNodeAvailable();
         return node.getServiceRegistry().listServices();
     }
 
     /**
-     * @return a Set containing all resolved ShipServices except this node's servcices
+     * @return a Set containing all resolved ShipServices except this node's
+     * servcices
      */
     public Set<ShipService> getCurrentServices() {
         assertNodeAvailable();

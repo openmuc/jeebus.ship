@@ -62,11 +62,10 @@ public interface ConnectionHandler {
     void serviceRemoved(ShipService service);
 
     /**
-     * Called when a new SHIP connection was sucessfully established. This means the
-     * SHIP connection reached the state "Connection Data Exchange" and a proper
-     * "Access methods" message containing their SHIP ID was received. It is strongly
-     * recommended to only communicate with remote SHIP nodes once this method is
-     * called.
+     * Called when a new remote SHIP client sucessfully established a connection to
+     * the server of this node. This means the SHIP connection reached the state
+     * "Connection Data Exchange" and a proper "Access methods" message containing
+     * their SHIP ID was received.
      *
      * @param connection
      *     the connection interface to communicate with the remote SHIP node
