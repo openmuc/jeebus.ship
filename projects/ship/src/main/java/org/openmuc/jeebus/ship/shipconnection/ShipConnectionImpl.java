@@ -32,10 +32,11 @@ import org.openmuc.jeebus.ship.view.UserInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.*;
 
 import static org.openmuc.jeebus.ship.message.connectionclose.ConnectionClosePhaseType.CONFIRM;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
@@ -77,13 +78,16 @@ public class ShipConnectionImpl implements ShipConnection {
 
     // when not null, Connection Data Exchange is enabled
     private ConnectionDataExchange cde;
-    // stores outgoing CDE messages while CDE is not yet enabled.
-    // they will be sent immediately when CDE becomes enabled.
-    private final Queue<CDEMsg> cdeMessageQueue = new ConcurrentLinkedQueue<>();
+    /**
+     * stores outgoing CDE messages while CDE is not yet enabled.
+     * they will be sent immediately when CDE becomes enabled.
+     */
+    private final Queue<CDEMsg> outgoingCdeQueue = new ConcurrentLinkedQueue<>();
 
     private AccessMethodsIdentification ami;
     // stores an AccessMethodsRequest in case Connection Data Exchange is not enabled yet
     private byte[] queuedAmrMessage;
+    private ScheduledFuture<?> amiTimeout;
 
     private final CloseHandler closeHandler = new CloseHandler(this);
 
@@ -108,7 +112,7 @@ public class ShipConnectionImpl implements ShipConnection {
         // TODO: eventually change to dynamically choose type of UI
         userInterface = new CommandLineInput();
 
-        stateMachine = new StateMachine(this, userInterface, getConfig());
+        stateMachine = new StateMachine(this, userInterface);
     }
 
     @Override
@@ -117,18 +121,21 @@ public class ShipConnectionImpl implements ShipConnection {
     }
 
     public void onMessage(byte[] message) {
-        LOGGER.debug("{} received message:\n" + MessageUtility.parseShipMsgToString(
-            message), getLogPrefix());
+        LOGGER.debug(
+            "{} received message:\n" + MessageUtility.parseShipMsgToString(message),
+            getLogPrefix()
+        );
         // message with MessageType value of 2 are processed in Connection Data Exchange
         switch (message[0]) {
             case 0:
             case 1:
-                if (new String(message, StandardCharsets.UTF_8).contains(
-                    "accessMethods")) {
+                if (new String(message, StandardCharsets.UTF_8)
+                    .contains("accessMethods")
+                ) {
                     if (cde == null) {
                         LOGGER.warn(
                             "access methods request was received but Connection Data"
-                                + " Exchange is not enabled"
+                                + " Exchange is not enabled. Queuing it until it is."
                         );
                         queuedAmrMessage = message;
                     }
@@ -326,10 +333,6 @@ public class ShipConnectionImpl implements ShipConnection {
         return this.nodeContext;
     }
 
-    public ShipNodeParameters getConfig() {
-        return nodeContext.getConfig();
-    }
-
     public String getLogPrefix() {
         return nodeContext.getLogPrefix();
     }
@@ -344,11 +347,6 @@ public class ShipConnectionImpl implements ShipConnection {
                 "Connection Data Exchange should be enabled before requesting access methods");
         }
 
-        if (!isServer()) {
-            throw new IllegalStateException(
-                "Only servers should request access methods");
-        }
-
         ami.sendRequest();
     }
 
@@ -359,16 +357,32 @@ public class ShipConnectionImpl implements ShipConnection {
             this,
             connHandler
         );
-        CDEMsg queuedMsg;
-        while ((queuedMsg = cdeMessageQueue.poll()) != null) {
-            cde.sendCDE(queuedMsg);
-        }
         ami = new AccessMethodsIdentification(this, nodeContext.getOwnShipId());
+        ami.sendRequest();
         if (queuedAmrMessage != null) {
             ami.processMsg(queuedAmrMessage);
         }
-        if (Objects.nonNull(connHandler)) {
-            connHandler.connectionDataExchangeEnabled(getRemoteAddress());
+        amiTimeout = Executors.newSingleThreadScheduledExecutor().schedule(
+            () -> {
+                LOGGER.warn(
+                    "{}: did not receive a proper accessMethods message containing their SHIP ID within {} seconds. Closing connection",
+                    getLogPrefix(),
+                    ShipNodeParameters.AMI_TIMEOUT
+                );
+                close();
+            },
+            ShipNodeParameters.AMI_TIMEOUT,
+            TimeUnit.SECONDS
+        );
+    }
+
+    public void connectionEstablished() {
+        if(amiTimeout.cancel(false) && nodeContext.getConnHandler() != null) {
+            CDEMsg queuedMsg;
+            while ((queuedMsg = outgoingCdeQueue.poll()) != null) {
+                cde.sendCDE(queuedMsg);
+            }
+            nodeContext.getConnHandler().connectionEstablished(this);
         }
     }
 
@@ -380,10 +394,10 @@ public class ShipConnectionImpl implements ShipConnection {
                 getLogPrefix()
             );
             // cde is not enabled yet, so queue the message
-            cdeMessageQueue.add(cdeMsg);
+            outgoingCdeQueue.add(cdeMsg);
         }
         else {
-            if (cdeMessageQueue.isEmpty()) {
+            if (outgoingCdeQueue.isEmpty()) {
                 cde.sendCDE(cdeMsg);
             }
             else {
@@ -391,7 +405,7 @@ public class ShipConnectionImpl implements ShipConnection {
                     "{}: Connection Data Exchange message will be queued",
                     getLogPrefix()
                 );
-                cdeMessageQueue.add(cdeMsg);
+                outgoingCdeQueue.add(cdeMsg);
             }
         }
     }
@@ -407,8 +421,18 @@ public class ShipConnectionImpl implements ShipConnection {
     }
 
     @Override
-    public String getRemoteAddress() {
-        return connection.getRemoteAddress();
+    public String getRemoteId() {
+        return ami.getAmMsg().getId();
+    }
+
+    @Override
+    public InetSocketAddress getRemoteAddress() {
+        return connection.getRemoteSocketAddress();
+    }
+
+    @Override
+    public URI getRemoteUri() {
+        return URI.create(ami.getAmMsg().getDns().getUri());
     }
 
     @Override
@@ -432,6 +456,7 @@ public class ShipConnectionImpl implements ShipConnection {
     public void prepareCDEShutdown() {
         // prepare shutdown and close connection if maxTime is not expired
         if (!closeHandler.getDevB().isMaxTimeExpired()) {
+            amiTimeout.cancel(false);
             LOGGER.info(
                 "{} stopped connection data exchange before maxTime was reached and will "
                     + "close the connection",
@@ -453,6 +478,7 @@ public class ShipConnectionImpl implements ShipConnection {
     @Override
     public void closeImmediately() {
         connection.close();
+        amiTimeout.cancel(false);
     }
 
     @Override

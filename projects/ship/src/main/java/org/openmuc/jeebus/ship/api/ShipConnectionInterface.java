@@ -10,6 +10,9 @@
 
 package org.openmuc.jeebus.ship.api;
 
+import java.net.InetSocketAddress;
+import java.net.URI;
+
 /**
  * users can interact with a specific client or server through this interface
  */
@@ -26,22 +29,32 @@ public interface ShipConnectionInterface extends AutoCloseable {
     void sendMsg(byte[] msg);
 
     /**
-     * @return the current SKI of the communication partner
+     * @return the SKI of the communication partner
      */
     String getRemoteSki();
 
     /**
-     * @return the IP address of the communication partner
-     *
-     * @deprecated since 2.3.0. The IP Address of remote nodes should be a
-     * SHIP-internal detail, not part of the API.
+     * @return the unique SHIP ID of the communication partner
      */
-    @Deprecated(since = "2.3.0")
-    String getRemoteAddress();
+    String getRemoteId();
 
     /**
-     * requests access methods from client, only works as server, an exception is
-     * thrown otherwise
+     * @return the socket address of the communication partner
      */
+    InetSocketAddress getRemoteAddress();
+
+    /**
+     * Try to parse the URI from the remote SHIP node's accessMethods message using
+     * {@link URI#create}
+     *
+     * @return the URI from the remote SHIP node's accessMethods message.
+     */
+    URI getRemoteUri();
+
+    /**
+     * requests access methods and SHIP-ID
+     * @deprecated since 3.0.0, as it happens automatically at the right stage.
+     */
+    @Deprecated(since = "3.0.0", forRemoval = true)
     void requestAccessMethods();
 }

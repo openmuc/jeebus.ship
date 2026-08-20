@@ -64,7 +64,6 @@ public class ServerListenProposal implements StateHandler {
         ProtocolHandshakeMsg proposal,
         StateHandlerContext context
     ) {
-        ShipNodeParameters config = context.getConfig();
         HashSet<String> supportedFormats
             = new HashSet<>(ShipNodeParameters.SUPPORTED_FORMATS);
         Optional<String> foundFormat = proposal

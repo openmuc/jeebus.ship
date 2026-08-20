@@ -189,22 +189,9 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         }
     }
 
+    @Override
     public InetSocketAddress getRemoteSocketAddress() {
         return (InetSocketAddress) channel.remoteAddress();
-    }
-
-    @Override
-    public String getRemoteAddress() {
-        String remoteAddress = this.remoteAddress;
-        if (remoteAddress == null) {
-            InetSocketAddress remoteAddr = (InetSocketAddress) channel.remoteAddress();
-            this.remoteAddress = remoteAddress = String.format(
-                "%s:%d",
-                remoteAddr.getAddress().getHostAddress(),
-                remoteAddr.getPort()
-            );
-        }
-        return remoteAddress;
     }
 
     protected synchronized void doubleConnProcedure(String peerSki) {

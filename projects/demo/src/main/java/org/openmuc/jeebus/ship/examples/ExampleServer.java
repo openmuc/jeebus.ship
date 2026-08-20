@@ -73,7 +73,7 @@ public class ExampleServer {
             }
 
             @Override
-            public void connectionDataExchangeEnabled(String ipAddr) {
+            public void connectionEstablished(ShipConnectionInterface connection) {
                 /*
                  This is called when the connection to a device reaches the
                  state "Connection Data Exchange". This is the State where

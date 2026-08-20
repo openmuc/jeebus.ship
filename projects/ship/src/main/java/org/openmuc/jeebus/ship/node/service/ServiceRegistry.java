@@ -358,7 +358,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     }
 
     private boolean isUs(ShipService service) {
-        return Objects.equals(service.getSki(), ownTxt.getSki())
+        return ownTxt != null
+            && Objects.equals(service.getSki(), ownTxt.getSki())
             && Objects.equals(service.getShipId(), ownTxt.getId());
     }
 

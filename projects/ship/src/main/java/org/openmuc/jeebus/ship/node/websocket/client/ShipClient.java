@@ -146,7 +146,6 @@ public class ShipClient {
         shipNode.removeClient(this);
     }
 
-
     @Nonnull
     private String fixPath(String what) {
         String result = what;

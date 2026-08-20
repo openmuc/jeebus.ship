@@ -12,8 +12,6 @@ package org.openmuc.jeebus.ship.api;
 
 import java.net.InetSocketAddress;
 
-// TODO: banish IP addresses from the API. Identities should be handled through
-//  SHIP ID + SKI
 public interface ConnectionHandler {
     /**
      * called when a message with payload was received
@@ -64,17 +62,15 @@ public interface ConnectionHandler {
     void serviceRemoved(ShipService service);
 
     /**
-     * Called when the connection to a device reaches the state "Connection Data
-     * Exchange". This is the State where non-SHIP-specific Messages (i.e. SPINE) are
-     * exchanged.
+     * Called when a new SHIP connection was sucessfully established. This means the
+     * SHIP connection reached the state "Connection Data Exchange" and a proper
+     * "Access methods" message containing their SHIP ID was received. It is strongly
+     * recommended to only communicate with remote SHIP nodes once this method is
+     * called.
      *
-     * @param ipAddr
-     *     the IP address of the connected device
-     *
-     * @deprecated sinde 2.3.0. The IP Address of remote nodes should be a
-     * SHIP-internal detail, not part of the API.
+     * @param connection
+     *     the connection interface to communicate with the remote SHIP node
      */
-    @Deprecated(since = "2.3.0")
-    void connectionDataExchangeEnabled(String ipAddr);
+    void connectionEstablished(ShipConnectionInterface connection);
 
 }

@@ -36,6 +36,7 @@ import java.util.concurrent.Executors;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.safelyParseSocketAddress;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
@@ -55,6 +56,14 @@ public class Ship implements ShipInterface, AutoCloseable {
     public Ship(ShipConfig nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
         node.setClientConnectedListener(this::runConnectionDataPreparation);
+    }
+
+    @Override
+    public ShipConnectionInterface openConnection(String ipAddr) {
+        return openConnection(
+            safelyParseSocketAddress(ipAddr),
+            "ship"
+        );
     }
 
     /**
@@ -78,14 +87,11 @@ public class Ship implements ShipInterface, AutoCloseable {
             = getExistingConnection(socket);
 
         if (existingConnection.isPresent()) {
-            ShipConnectionInterface connApi = existingConnection
-                .get()
-                .getApiShipConn();
             log.info(
                 "Reusing existing connection to {}",
                 beautify(socket)
             );
-            return connApi;
+            return existingConnection.get().getApiShipConn();
         }
 
         ShipClient client = node.createClient(socket, path);

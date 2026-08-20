@@ -15,6 +15,7 @@ import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipConfig;
+import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,8 +185,7 @@ public final class ConfigBuilder {
     public ConfigBuilder withServerBindAddresses(String... serverBindAddresses) {
         Set<InetSocketAddress> result = Arrays
             .stream(serverBindAddresses)
-            .map(ConfigBuilder::safelyParseSocketAddress)
-            .map(uri -> new InetSocketAddress(uri.getHost(), uri.getPort()))
+            .map(ShipUtilities::safelyParseSocketAddress)
             .collect(Collectors.toSet());
 
         return withServerBindAddresses(result);
@@ -512,18 +512,6 @@ public final class ConfigBuilder {
                 + " '"
                 + value
                 + "' SHALL NOT exceed 63 bytes");
-        }
-    }
-
-    private static URI safelyParseSocketAddress(String host) {
-        try {
-            return new URI("dummy://" + host);
-        }
-        catch (URISyntaxException e) {
-            throw new IllegalArgumentException(
-                "serverBindAddress was invalid: ",
-                e
-            );
         }
     }
 

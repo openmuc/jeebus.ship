@@ -29,7 +29,6 @@ public class ClientListenChoice implements StateHandler {
 
     @Override
     public void processMessage(byte[] msg, StateHandlerContext context) {
-        ShipNodeParameters config = context.getConfig();
         ProtocolHandshakeMsg choice
             = MessageUtility.preprocessProtHMsg(msg);
         if (!SmeProtH.isValidMsg(ProtocolHandshakeTypeType.SELECT, choice)) {

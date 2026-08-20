@@ -11,9 +11,7 @@
 package org.openmuc.jeebus.ship.util;
 
 import javax.annotation.Nonnull;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.TreeSet;
@@ -73,5 +71,18 @@ public class ShipUtilities {
     @Nonnull
     public static Collector<InetAddress, ?, TreeSet<InetAddress>> toScopedAddressTreeSet() {
         return Collectors.toCollection(() -> new TreeSet<>(SCOPED_ADDRESS_ORDER));
+    }
+
+    public static InetSocketAddress safelyParseSocketAddress(String socketString) {
+        try {
+            URI uri = new URI("dummy://" + socketString);
+            return new InetSocketAddress(uri.getHost(), uri.getPort());
+        }
+        catch (URISyntaxException e) {
+            throw new IllegalArgumentException(
+                "serverBindAddress was invalid: ",
+                e
+            );
+        }
     }
 }

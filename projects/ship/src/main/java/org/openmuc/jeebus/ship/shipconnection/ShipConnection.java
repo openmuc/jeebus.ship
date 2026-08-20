@@ -25,6 +25,8 @@ public interface ShipConnection extends ShipConnectionInterface {
 
     void enableConnectionDataExchange();
 
+    void connectionEstablished();
+
     void setUserInterface(UserInterface userInterface);
 
     /**

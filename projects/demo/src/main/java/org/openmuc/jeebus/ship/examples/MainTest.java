@@ -60,7 +60,7 @@ public class MainTest {
             }
 
             @Override
-            public void connectionDataExchangeEnabled(String ipAddr) {
+            public void connectionEstablished(ShipConnectionInterface connection) {
 
             }
         };
@@ -94,9 +94,10 @@ public class MainTest {
             }
 
             @Override
-            public void connectionDataExchangeEnabled(String ipAddr) {
+            public void connectionEstablished(ShipConnectionInterface connection) {
 
             }
+
         };
 
         Instant begin = Instant.now();

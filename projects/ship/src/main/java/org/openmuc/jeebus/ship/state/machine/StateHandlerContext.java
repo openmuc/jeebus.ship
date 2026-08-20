@@ -10,7 +10,6 @@
 
 package org.openmuc.jeebus.ship.state.machine;
 
-import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.view.UserInterface;
 
 import java.util.concurrent.TimeUnit;
@@ -121,11 +120,6 @@ public interface StateHandlerContext {
      * @return whether the communication partner is trusted at least this much
      */
     boolean requireTrust(int minimumTrust);
-
-    /**
-     * @return the configuration for this node
-     */
-    ShipNodeParameters getConfig();
 
     /**
      * @return the interface to prompt the user about some action

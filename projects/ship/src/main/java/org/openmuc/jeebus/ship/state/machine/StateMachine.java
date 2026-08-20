@@ -58,7 +58,6 @@ public class StateMachine implements StateHandlerContext {
     private final boolean isServer;
     protected final ShipConnection shipConnection;
     private final UserInterface userInterface;
-    private final ShipNodeParameters config;
     private byte[] pendingMessage;
 
     protected ScheduledExecutorService timeoutExecutor
@@ -82,14 +81,12 @@ public class StateMachine implements StateHandlerContext {
     public StateMachine(
         ShipConnection shipConnection,
         UserInterface userInterface,
-        ShipNodeParameters config,
         State initial,
         Object extraData
     ) {
         this.shipConnection = shipConnection;
         this.userInterface = userInterface;
 
-        this.config = config;
         this.isServer = shipConnection.isServer();
         state = initial;
         actions = state != null ? state.getHandler() : null;
@@ -98,10 +95,9 @@ public class StateMachine implements StateHandlerContext {
 
     public StateMachine(
         ShipConnection shipConnection,
-        UserInterface userInterface,
-        ShipNodeParameters config
+        UserInterface userInterface
     ) {
-        this(shipConnection, userInterface, config, null, null);
+        this(shipConnection, userInterface, null, null);
     }
 
     public void begin() {
@@ -224,14 +220,10 @@ public class StateMachine implements StateHandlerContext {
         shipConnection.closeImmediately();
     }
 
-    public ShipNodeParameters getConfig() {
-        return config;
-    }
-
     public int getDefaultTimeoutSeconds(SpecifiedTimeout which) {
         switch (which) {
             case CMI_TIMEOUT:
-                return getCmiTimeoutVal(config.CMI_TIMEOUT);
+                return getCmiTimeoutVal(ShipNodeParameters.CMI_TIMEOUT);
             case SME_WAIT_FOR_READY:
                 return ShipNodeParameters.T_HELLO_INIT;
             case SME_SEND_PROLONGATION_REQUEST:

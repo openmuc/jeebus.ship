@@ -57,7 +57,6 @@ public class ShipServerHandler extends WebSocketHandler implements
             .getLogPrefix()
             .replace(")", ", client port " + remotePort + ")");
         nodeContext = new ShipNodeContext(
-            nodeContext.getConfig(),
             specificLogPrefix,
             nodeContext.getConnHandler(),
             nodeContext.getOwnShipId(),
@@ -150,8 +149,11 @@ public class ShipServerHandler extends WebSocketHandler implements
 
         // Handshake
         WebSocketServerHandshakerFactory wsFactory
-            = new WebSocketServerHandshakerFactory(getWebSocketLocation(req),
-            "ship", true, 5 * 1024 * 1024
+            = new WebSocketServerHandshakerFactory(
+                getWebSocketLocation(req),
+                "ship",
+                true,
+                5 * 1024 * 1024
         );
         WebSocketServerHandshaker handshaker = wsFactory.newHandshaker(req);
         if (handshaker == null) {
@@ -163,7 +165,10 @@ public class ShipServerHandler extends WebSocketHandler implements
             if (node.isDoubleConnection(getPeerSki())) {
                 doubleConnProcedure(this.getPeerSki());
             }
-            connection = new ShipConnectionImpl(true, getTrustLevel(), nodeContext,
+            connection = new ShipConnectionImpl(
+                true,
+                getTrustLevel(),
+                nodeContext,
                 this
             );
             shipConnRdyLatch.countDown();

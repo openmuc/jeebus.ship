@@ -61,8 +61,6 @@ public class ShipNodeImpl {
 
     private final SslContextFactory sslContextFactory;
 
-    private final ShipNodeParameters staticConfig;
-
     private final ServiceRegistry serviceRegistry;
 
     private final ConnectionHandler connHandler;
@@ -111,8 +109,6 @@ public class ShipNodeImpl {
         // disable TLS client initiated renegotiation as per SHIP specification,
         // server initiated renegotiation is not supported by netty as of version 4.1
         System.setProperty("jdk.tls.rejectClientInitiatedRenegotiation", "true");
-
-        staticConfig = new ShipNodeParameters();
 
         sslContextFactory = new SslContextFactory();
 
@@ -217,7 +213,7 @@ public class ShipNodeImpl {
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
                 this.keyManagement,
-                staticConfig,
+
                 nodeConfig.getId()
             );
             nodeCtx.setConnHandler(connHandler);
@@ -252,7 +248,6 @@ public class ShipNodeImpl {
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
                 this.keyManagement,
-                staticConfig,
                 nodeConfig.getId()
             );
             nodeCtx.setConnHandler(connHandler);
@@ -283,7 +278,8 @@ public class ShipNodeImpl {
             serviceRegistry.toggleRegisterFlag();
 
             int autoAcceptWindow = getAutoAcceptWindow(
-                getStaticConfig().AUTO_ACCEPT_WINDOW);
+                ShipNodeParameters.AUTO_ACCEPT_WINDOW
+            );
             log.info(
                 "SHIP node starting auto accept mode, it will last for {} seconds",
                 autoAcceptWindow
@@ -351,10 +347,6 @@ public class ShipNodeImpl {
 
     public KeyManagement getKeyManagement() {
         return keyManagement;
-    }
-
-    public ShipNodeParameters getStaticConfig() {
-        return this.staticConfig;
     }
 
     public ConnectionHandler getConnHandler() {

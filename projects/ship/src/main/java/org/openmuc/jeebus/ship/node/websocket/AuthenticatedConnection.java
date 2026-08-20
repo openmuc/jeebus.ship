@@ -12,12 +12,14 @@ package org.openmuc.jeebus.ship.node.websocket;
 
 import org.openmuc.jeebus.ship.shipconnection.BasicConnection;
 
+import java.net.InetSocketAddress;
+
 /**
  * In addition to a {@link BasicConnection}, we also know who the communication
  * partner is.
  */
 public interface AuthenticatedConnection extends BasicConnection {
-    String getRemoteAddress();
+    InetSocketAddress getRemoteSocketAddress();
 
     String getPeerSki();
 }

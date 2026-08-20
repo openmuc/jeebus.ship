@@ -36,7 +36,6 @@ public class AccessMethodsIdentification {
     ) {
         this.shipConn = shipConn;
         this.ownShipId = ownShipId;
-        sendRequest();
     }
 
     public void processMsg(byte[] msg) {
@@ -45,8 +44,6 @@ public class AccessMethodsIdentification {
                 .contains("accessMethodsRequest")
             ) {
                 amrMsg = MessageUtility.preprocessAmrMsg(msg);
-                /* fixme: we should initialize this message with all values correctly
-                 *  according to SHIP:13.4.6.2.*/
                 shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
                     ownShipId,
                     new AccessMethodsMsg.DnsSd_mDns(),
@@ -55,6 +52,7 @@ public class AccessMethodsIdentification {
             }
             else {
                 amMsg = MessageUtility.preprocessAmMsg(msg);
+                shipConn.connectionEstablished();
             }
         }
         catch (IllegalArgumentException | JsonParseException e) {

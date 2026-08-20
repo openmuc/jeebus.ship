@@ -43,7 +43,6 @@ public class RegistrationReconnectionTest {
                 "test",
                 3650
             ),
-            new ShipNodeParameters(),
             "some-id"
     );
 

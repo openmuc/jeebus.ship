@@ -12,6 +12,7 @@ package org.openmuc.jeebus.ship.node.service;
 
 import org.junit.jupiter.api.Test;
 import org.openmuc.jeebus.ship.api.ConfigBuilder;
+import org.openmuc.jeebus.ship.api.ShipService;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.util.ShipTestUtil;
 
@@ -78,15 +79,15 @@ class ServiceRegistryTest {
 
             await()
                 .atMost(20, SECONDS)
-                .until(() -> !serviceReg2.listServices().isEmpty());
+                .until(() -> !serviceReg2.getCurrentServices().isEmpty());
 
-            Optional<ServiceInfo> service = serviceReg2
-                .listServices()
+            Optional<ShipService> service = serviceReg2
+                .getCurrentServices()
                 .stream()
                 .findAny();
 
             assertThat(
-                service.orElseThrow().getName(),
+                service.orElseThrow().getInstance(),
                 is(instance)
             );
         }
