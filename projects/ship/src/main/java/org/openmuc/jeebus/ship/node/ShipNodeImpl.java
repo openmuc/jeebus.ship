@@ -126,13 +126,13 @@ public class ShipNodeImpl {
                 nodeConfig.isKeepAlive()
             ));
 
-            if (nodeConfig.getAutoAcceptEnabled()) {
-                enableAutoAcceptMode();
-            }
-
             serviceRegistry.initiateTxt(
                 getOwnSki()
             );
+
+            if (nodeConfig.getAutoAcceptEnabled()) {
+                enableAutoAcceptMode();
+            }
         }
         else {
             this.server = Optional.empty();

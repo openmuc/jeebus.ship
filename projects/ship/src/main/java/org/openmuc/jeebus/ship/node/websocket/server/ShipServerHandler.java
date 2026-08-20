@@ -20,7 +20,6 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
@@ -28,8 +27,7 @@ import java.net.InetSocketAddress;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 
-public class ShipServerHandler extends WebSocketHandler implements
-    AuthenticatedConnection {
+public class ShipServerHandler extends WebSocketHandler {
 
     private final ShipServer server;
 
@@ -102,7 +100,7 @@ public class ShipServerHandler extends WebSocketHandler implements
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                connection.getApiShipConn()
+                                connection.getApiShipConnection()
                             );
                     }
                     close();

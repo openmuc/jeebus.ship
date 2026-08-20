@@ -40,8 +40,7 @@ import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALI
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
 import static org.openmuc.jeebus.ship.message.MessageUtility.wrapInBinaryFrame;
 
-public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> implements
-    AuthenticatedConnection {
+public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -50,7 +49,6 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     protected ShipConnectionImpl connection;
 
     // cache these values so we don't have to recompute them all the time
-    private volatile transient String remoteAddress = null;
     private volatile transient String peerSki = null;
 
     protected Channel channel;
@@ -163,7 +161,6 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return trustLevel;
     }
 
-    @Override
     public String getPeerSki() {
         String peerSki = this.peerSki;
         if (peerSki == null) {
@@ -189,7 +186,6 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         }
     }
 
-    @Override
     public InetSocketAddress getRemoteSocketAddress() {
         return (InetSocketAddress) channel.remoteAddress();
     }
@@ -202,11 +198,12 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                 // own ski is bigger
                 node.closeDoubleConns(this);
                 if (nodeContext.getConnHandler() != null && connection != null) {
+                    // TODO: The connection should not even be announced to the
                     nodeContext
                         .getConnHandler()
                         .onDisconnect(
                             DisconnectReason.DOUBLE_CONNECTION,
-                            connection.getApiShipConn()
+                            connection.getApiShipConnection()
                         );
                 }
             }

@@ -22,14 +22,12 @@ import io.netty.handler.codec.http.websocketx.WebSocketHandshakeException;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
 import java.net.InetSocketAddress;
 
-public class ShipClientHandler extends WebSocketHandler implements
-    AuthenticatedConnection {
+public class ShipClientHandler extends WebSocketHandler {
 
     private final WebSocketClientHandshaker handshaker;
     private final StopClientListener stopListener;
@@ -37,11 +35,11 @@ public class ShipClientHandler extends WebSocketHandler implements
 
     public ShipClientHandler(
         WebSocketClientHandshaker handshaker,
-        ShipNodeContext nodeCtx,
-        ShipNodeImpl shipNode,
+        ShipNodeContext nodeContext,
+        ShipNodeImpl node,
         StopClientListener stopListener
     ) {
-        super(nodeCtx, shipNode);
+        super(nodeContext, node);
         this.handshaker = handshaker;
         this.stopListener = stopListener;
     }
@@ -118,7 +116,7 @@ public class ShipClientHandler extends WebSocketHandler implements
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                connection.getApiShipConn()
+                                connection.getApiShipConnection()
                             );
                     }
                     stopListener.stop();

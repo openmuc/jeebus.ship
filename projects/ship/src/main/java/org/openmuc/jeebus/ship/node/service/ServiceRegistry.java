@@ -11,7 +11,6 @@
 package org.openmuc.jeebus.ship.node.service;
 
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
-import org.openmuc.jeebus.ship.api.Ship;
 import org.openmuc.jeebus.ship.api.ShipService;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
@@ -283,9 +282,9 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     }
 
     public void toggleRegisterFlag() {
+        ownTxt.setRegister(!ownTxt.getRegister());
         if (boundSocketAddresses != null && !boundSocketAddresses.isEmpty()) {
             unregisterAllServices();
-            ownTxt.setRegister(!ownTxt.getRegister());
             registerServices(boundSocketAddresses);
         }
     }

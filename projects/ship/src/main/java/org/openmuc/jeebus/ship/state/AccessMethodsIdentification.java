@@ -26,16 +26,13 @@ public class AccessMethodsIdentification {
         AccessMethodsIdentification.class);
     private final ShipConnection shipConn;
 
-    private final String ownShipId;
     private AccessMethodsRequestMsg amrMsg;
     private AccessMethodsMsg amMsg;
 
     public AccessMethodsIdentification(
-        ShipConnection shipConn,
-        String ownShipId
+        ShipConnection shipConn
     ) {
         this.shipConn = shipConn;
-        this.ownShipId = ownShipId;
     }
 
     public void processMsg(byte[] msg) {
@@ -44,10 +41,11 @@ public class AccessMethodsIdentification {
                 .contains("accessMethodsRequest")
             ) {
                 amrMsg = MessageUtility.preprocessAmrMsg(msg);
-                shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
-                    ownShipId,
-                    new AccessMethodsMsg.DnsSd_mDns(),
-                    null
+                shipConn.sendRawMessage(
+                    ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
+                        shipConn.getShipNodeContext().getOwnShipId(),
+                        new AccessMethodsMsg.DnsSd_mDns(),
+                        null
                 )));
             }
             else {
@@ -56,12 +54,14 @@ public class AccessMethodsIdentification {
             }
         }
         catch (IllegalArgumentException | JsonParseException e) {
-            LOGGER.error(e.getMessage());
+            LOGGER.error("Error while processing AMI message:", e);
         }
     }
 
     public void sendRequest() {
-        shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsRequestMsg()));
+        shipConn.sendRawMessage(
+            ShipMessageFactory.parseAmiBody(new AccessMethodsRequestMsg())
+        );
     }
 
     public AccessMethodsRequestMsg getAmrMsg() {

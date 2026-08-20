@@ -10,9 +10,9 @@
 
 package org.openmuc.jeebus.ship.shipconnection;
 
-import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
+import org.openmuc.jeebus.ship.message.MessageType;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
@@ -21,8 +21,8 @@ import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
 import org.openmuc.jeebus.ship.node.websocket.SkiManagementInfo;
+import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.state.AccessMethodsIdentification;
 import org.openmuc.jeebus.ship.state.ConnectionDataExchange;
 import org.openmuc.jeebus.ship.state.machine.State;
@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.*;
 
@@ -46,7 +47,8 @@ public class ShipConnectionImpl implements ShipConnection {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShipConnectionImpl.class);
 
     public enum Role {
-        CLIENT, SERVER
+        CLIENT,
+        SERVER
     }
 
     private final Role role;
@@ -64,29 +66,29 @@ public class ShipConnectionImpl implements ShipConnection {
      */
     private int forcedTrustLevel;
 
-    private AuthenticatedConnection connection;
+    private final WebSocketHandler webSocketHandler;
 
     private final String peerSki;
-    private boolean trustCommPartner;
 
     // TODO: maybe move to ShipNode
     private UserInterface userInterface;
-
-    private int selectedMajor;
-    private int selectedMinor;
-    private String selectedFormat;
 
     // when not null, Connection Data Exchange is enabled
     private ConnectionDataExchange cde;
     /**
      * stores outgoing CDE messages while CDE is not yet enabled.
-     * they will be sent immediately when CDE becomes enabled.
+     * they are sent immediately when CDE is enabled.
      */
     private final Queue<CDEMsg> outgoingCdeQueue = new ConcurrentLinkedQueue<>();
+    /**
+     * stores incoming CDE messages while AMI is not yet through.
+     * they are processed immediately when it is.
+     */
+    private final Queue<byte[]> incomingCdeQueue = new ConcurrentLinkedQueue<>();
 
     private AccessMethodsIdentification ami;
     // stores an AccessMethodsRequest in case Connection Data Exchange is not enabled yet
-    private byte[] queuedAmrMessage;
+    private final Queue<byte[]> queuedAmiMessages = new ConcurrentLinkedQueue<>();
     private ScheduledFuture<?> amiTimeout;
 
     private final CloseHandler closeHandler = new CloseHandler(this);
@@ -95,7 +97,7 @@ public class ShipConnectionImpl implements ShipConnection {
         boolean server,
         int trustLevel,
         ShipNodeContext nodeContext,
-        AuthenticatedConnection connection
+        WebSocketHandler webSocketHandler
     ) {
         this.role = server ? Role.SERVER : Role.CLIENT;
         if (trustLevel > 0) {
@@ -103,11 +105,10 @@ public class ShipConnectionImpl implements ShipConnection {
         } else {
             forcedTrustLevel = -1;
         }
-        this.trustCommPartner = trustLevel >= MINIMAL_TRUST_LEVEL;
         this.nodeContext = nodeContext;
 
-        this.connection = connection;
-        this.peerSki = connection.getPeerSki();
+        this.webSocketHandler = webSocketHandler;
+        this.peerSki = webSocketHandler.getPeerSki();
 
         // TODO: eventually change to dynamically choose type of UI
         userInterface = new CommandLineInput();
@@ -125,63 +126,67 @@ public class ShipConnectionImpl implements ShipConnection {
             "{} received message:\n" + MessageUtility.parseShipMsgToString(message),
             getLogPrefix()
         );
-        // message with MessageType value of 2 are processed in Connection Data Exchange
-        switch (message[0]) {
-            case 0:
-            case 1:
-                if (new String(message, StandardCharsets.UTF_8)
-                    .contains("accessMethods")
-                ) {
-                    if (cde == null) {
-                        LOGGER.warn(
-                            "access methods request was received but Connection Data"
-                                + " Exchange is not enabled. Queuing it until it is."
-                        );
-                        queuedAmrMessage = message;
+
+        Optional<MessageType> type = MessageType.fromValue(message[0]);
+
+        if (type.isEmpty()) {
+            LOGGER.error(
+                "{} received a message with an unrecognized MessageType: {}",
+                getLogPrefix(),
+                message[0]
+            );
+        }
+        else {
+            switch (type.get()) {
+                case INIT:
+                case CONTROL:
+                    if (new String(message, StandardCharsets.UTF_8)
+                        .contains("accessMethods")
+                    ) {
+                        if (cde == null) {
+                            LOGGER.warn(
+                                "accessMethods message was received but Connection Data"
+                                    + " Exchange is not enabled. Queuing it until it is."
+                            );
+                            queuedAmiMessages.add(message);
+                        }
+                        else {
+                            if (ami == null) {
+                                ami = new AccessMethodsIdentification(this);
+                            }
+                            ami.processMsg(message);
+                        }
+                    }
+                    else if (stateMachine.getState() == State.SME_HELLO_OK) {
+                        LOGGER.error("received message in HELLO_OK state");
                     }
                     else {
-                        if (ami == null) {
-                            ami = new AccessMethodsIdentification(
-                                this,
-                                nodeContext.getOwnShipId()
-                            );
-                        }
-                        ami.processMsg(message);
+                        stateMachine.messageReceived(message);
                     }
-                }
-                else if (stateMachine.getState() == State.SME_HELLO_OK) {
-                    LOGGER.error("received message in HELLO_OK state");
-                }
-                else {
-                    stateMachine.messageReceived(message);
-                }
-                break;
-            case 2:
-                // CDE message
-                if (cde == null) {
-                    LOGGER.warn(
-                        "message with MessageType = 2 was received but Connection Data Exchange is not enabled");
-                }
-                else {
-                    cde.processMsg(message);
-                }
-                break;
-            case 3:
-                // Connection Close message
-                if (cde != null) {
-                    closeHandler.processMsg(message);
-                } else {
-                    LOGGER.error(
-                        "Connection Close should not be requested without entering Connection Data Exchange before");
-                }
-                break;
-            default:
-                LOGGER.error(
-                    "{} received a message with an unrecognized MessageType: {}",
-                    getLogPrefix(),
-                    message[0]
-                );
-                break;
+                    break;
+                case DATA:
+                    // CDE message
+                    if (cde == null || ami == null || ami.getAmMsg() == null ) {
+                        LOGGER.debug(
+                            "Connection Data Exchange message received prematurely."
+                            + " Queuing it for later processing."
+                        );
+                        incomingCdeQueue.add(message);
+                    }
+                    else {
+                        cde.processMsg(message);
+                    }
+                    break;
+                case END:
+                    // Connection Close message
+                    if (cde != null) {
+                        closeHandler.processMsg(message);
+                    } else {
+                        LOGGER.error(
+                            "Connection Close should not be requested without entering Connection Data Exchange before");
+                    }
+                    break;
+            }
         }
     }
 
@@ -208,7 +213,6 @@ public class ShipConnectionImpl implements ShipConnection {
         closeHandler.initiate(maxTime, reason);
     }
 
-
     @Override
     public int getTrustLevel() {
         if (forcedTrustLevel >= 0) {
@@ -217,7 +221,7 @@ public class ShipConnectionImpl implements ShipConnection {
             SkiManagementInfo skiManagementInfo = this.nodeContext
                 .getKeyManagement()
                 .getTrustedSkis()
-                .get(connection.getPeerSki());
+                .get(webSocketHandler.getPeerSki());
             if (skiManagementInfo == null) {
                 return 0;
             } else {
@@ -248,10 +252,6 @@ public class ShipConnectionImpl implements ShipConnection {
         forcedTrustLevel = -1;
     }
 
-    public boolean trustsCommPartner() {
-        return trustCommPartner;
-    }
-
     /**
      * Set the communication partner to be trusted, allowing communication to
      * proceed.
@@ -269,60 +269,11 @@ public class ShipConnectionImpl implements ShipConnection {
             throw new IllegalStateException(
                 "trust level should be higher than "+MINIMAL_TRUST_LEVEL+" to proceed");
         }
-        this.trustCommPartner = true;
         stateMachine.setCommPartnerTrusted();
     }
 
-    /**
-     * Set the communication partner to untrusted. This does not affect the trust
-     * level configured for this connection or for the partner's SKI.
-     */
-    public void distrustCommPartner() {
-        this.trustCommPartner = false;
-    }
-
-    public AuthenticatedConnection getConnection() {
-        return connection;
-    }
-
-    public void setConnection(AuthenticatedConnection basicListener) {
-        this.connection = basicListener;
-    }
-
-    public int getSelectedMajor() {
-        return selectedMajor;
-    }
-
-    public void setSelectedMajor(int selectedMajor) {
-        this.selectedMajor = selectedMajor;
-    }
-
-    public int getSelectedMinor() {
-        return selectedMinor;
-    }
-
-    public void setSelectedMinor(int selectedMinor) {
-        this.selectedMinor = selectedMinor;
-    }
-
-    public void setSelectedVersion(int major, int minor) {
-        selectedMajor = major;
-        selectedMinor = minor;
-    }
-
-    public String getSelectedFormat() {
-        return selectedFormat;
-    }
-
-    public void setSelectedFormat(String selectedFormat) {
-        this.selectedFormat = selectedFormat;
-    }
-
-    public ShipConnectionInterface getApiShipConn() {
+    public ShipConnectionInterface getApiShipConnection() {
         return this;
-    }
-
-    public void setApiShipConn(ShipConnectionInterface shipConnInterface) {
     }
 
     public boolean isConnectionCloseState() {
@@ -352,17 +303,22 @@ public class ShipConnectionImpl implements ShipConnection {
 
     @Override
     public void enableConnectionDataExchange() {
-        ConnectionHandler connHandler = nodeContext.getConnHandler();
         cde = new ConnectionDataExchange(
             this,
-            connHandler
+            nodeContext.getConnHandler()
         );
-        ami = new AccessMethodsIdentification(this, nodeContext.getOwnShipId());
-        ami.sendRequest();
-        if (queuedAmrMessage != null) {
-            ami.processMsg(queuedAmrMessage);
+        if (ami == null) {
+            ami = new AccessMethodsIdentification(this);
         }
-        amiTimeout = Executors.newSingleThreadScheduledExecutor().schedule(
+        ami.sendRequest();
+        while (!queuedAmiMessages.isEmpty()) {
+            ami.processMsg(queuedAmiMessages.poll());
+        }
+
+        ScheduledExecutorService executor
+            = Executors.newSingleThreadScheduledExecutor();
+
+        amiTimeout = executor.schedule(
             () -> {
                 LOGGER.warn(
                     "{}: did not receive a proper accessMethods message containing their SHIP ID within {} seconds. Closing connection",
@@ -374,15 +330,21 @@ public class ShipConnectionImpl implements ShipConnection {
             ShipNodeParameters.AMI_TIMEOUT,
             TimeUnit.SECONDS
         );
+
+        executor.shutdown();
     }
 
     public void connectionEstablished() {
         if(amiTimeout.cancel(false) && nodeContext.getConnHandler() != null) {
-            CDEMsg queuedMsg;
-            while ((queuedMsg = outgoingCdeQueue.poll()) != null) {
-                cde.sendCDE(queuedMsg);
-            }
             nodeContext.getConnHandler().connectionEstablished(this);
+
+            while (!incomingCdeQueue.isEmpty()) {
+                cde.processMsg(incomingCdeQueue.poll());
+            }
+
+            while (!outgoingCdeQueue.isEmpty()) {
+                cde.sendCDE(outgoingCdeQueue.poll());
+            }
         }
     }
 
@@ -427,7 +389,7 @@ public class ShipConnectionImpl implements ShipConnection {
 
     @Override
     public InetSocketAddress getRemoteAddress() {
-        return connection.getRemoteSocketAddress();
+        return webSocketHandler.getRemoteSocketAddress();
     }
 
     @Override
@@ -445,12 +407,12 @@ public class ShipConnectionImpl implements ShipConnection {
         if (LOGGER.isDebugEnabled()) {
             // avoid msg->string conversion if debug is not enabled
             LOGGER.debug(
-                "{} sending message:\n\t{}",
+                "{} sending message:\n{}",
                 getLogPrefix(),
                 MessageUtility.parseShipMsgToString(message)
             );
         }
-        connection.sendMsg(message);
+        webSocketHandler.sendMsg(message);
     }
 
     public void prepareCDEShutdown() {
@@ -464,20 +426,20 @@ public class ShipConnectionImpl implements ShipConnection {
             );
             CloseMsg closeMsg = new CloseMsg(CONFIRM);
             sendRawMessage(ShipMessageFactory.parseConnectionCloseBody(closeMsg));
-            ConnectionHandler connHandler = nodeContext.getConnHandler();
+            org.openmuc.jeebus.ship.api.ConnectionHandler connHandler = nodeContext.getConnHandler();
             if (connHandler != null) {
                 connHandler.onDisconnect(
                     DisconnectReason.REGULAR_END,
                     this
                 );
             }
-            connection.close();
+            webSocketHandler.close();
         }
     }
 
     @Override
     public void closeImmediately() {
-        connection.close();
+        webSocketHandler.close();
         amiTimeout.cancel(false);
     }
 

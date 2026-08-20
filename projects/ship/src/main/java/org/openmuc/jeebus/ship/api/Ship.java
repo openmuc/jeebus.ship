@@ -91,7 +91,7 @@ public class Ship implements ShipInterface, AutoCloseable {
                 "Reusing existing connection to {}",
                 beautify(socket)
             );
-            return existingConnection.get().getApiShipConn();
+            return existingConnection.get().getApiShipConnection();
         }
 
         ShipClient client = node.createClient(socket, path);
@@ -109,7 +109,7 @@ public class Ship implements ShipInterface, AutoCloseable {
         ShipConnectionImpl connection = clientHandler.getConnection();
         runConnectionDataPreparation(connection);
 
-        return connection.getApiShipConn();
+        return connection.getApiShipConnection();
     }
 
     private Optional<ShipConnectionImpl> getExistingConnection(
