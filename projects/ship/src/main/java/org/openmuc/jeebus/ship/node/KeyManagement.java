@@ -20,6 +20,7 @@ import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.cert.CertIOException;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -35,15 +36,13 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
 import java.security.*;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MAXIMAL_TRUST_LEVEL;
@@ -55,10 +54,24 @@ import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVE
 public class KeyManagement {
 
     protected static final Logger log = LoggerFactory.getLogger(KeyManagement.class);
+    private final static JcaX509ExtensionUtils EXTENSION_UTILS;
     private final Map<String, SkiManagementInfo> trustedSkis
         = new ConcurrentHashMap<>();
     private final CertificateInfo cert;
     private final SubjectKeyIdentifier ownSki;
+
+    static {
+        try {
+            EXTENSION_UTILS = new JcaX509ExtensionUtils();
+        }
+        catch (NoSuchAlgorithmException e) {
+            // If we cannot generate SKIs, SHIP is futile. Fail early.
+            throw new RuntimeException(
+                "Could not initiate JcaX509ExtensionUtils needed for SKI generation",
+                e
+            );
+        }
+    }
 
     /**
      * Loads the key by using the provided certificateStorage.
@@ -100,19 +113,9 @@ public class KeyManagement {
             certificateStorage.saveCertificate(this.cert);
         }
 
-        this.ownSki = generateSki(this.cert.certificate.getPublicKey());
-    }
-
-    public static SubjectKeyIdentifier generateSki(PublicKey publicKey) {
-        JcaX509ExtensionUtils utils = null;
-        try {
-            utils = new JcaX509ExtensionUtils();
-        }
-        catch (NoSuchAlgorithmException e) {
-            log.error("exception while generating SKI value: ", e);
-        }
-        assert utils != null;
-        return utils.createSubjectKeyIdentifier(publicKey);
+        this.ownSki = EXTENSION_UTILS.createSubjectKeyIdentifier(
+            this.cert.certificate.getPublicKey()
+        );
     }
 
     /**
@@ -296,7 +299,7 @@ public class KeyManagement {
             certBuilder.addExtension(
                 Extension.subjectKeyIdentifier,
                 false,
-                generateSki(keyPair.getPublic())
+                EXTENSION_UTILS.createSubjectKeyIdentifier(keyPair.getPublic())
             );
 
             // Make the cert builder a cert authority in case more certs are needed
@@ -342,12 +345,8 @@ public class KeyManagement {
         return new CertificateInfo(keyPair.getPrivate(), cert);
     }
 
-    public SubjectKeyIdentifier getOwnSki() {
-        return this.ownSki;
-    }
-
-    public String getOwnSkiAsStr() {
-        return encodeSkiAsString(getOwnSki());
+    public String getOwnSki() {
+        return encodeSkiAsString(this.ownSki);
     }
 
     public CertificateInfo getCert() {
@@ -359,4 +358,43 @@ public class KeyManagement {
             && trustedSkis.get(remoteSki) != null
             && trustedSkis.get(remoteSki).getTrustLevel() >= MINIMAL_TRUST_LEVEL;
     }
+
+    public static String getAuthenticatedPeerSki(
+        X509Certificate certificate,
+        String expectedSki
+    ) throws CertificateEncodingException {
+
+        String trueSki = encodeSkiAsString(
+            EXTENSION_UTILS.createSubjectKeyIdentifier(certificate.getPublicKey())
+        );
+
+        Optional<String> skiFromField = readSkiField(certificate);
+
+        if (skiFromField.isPresent()
+            && !Objects.equals(skiFromField.get(), trueSki)
+        ) {
+            throw new ShipAuthenticationException(
+                "SKI field in their certificate does not match the SKI generated from their public key. This indicates either an error in the creation of their certificate or a malicious spoofing attempt. As we cannot distinguish between these cases, we will close the connection."
+            );
+        }
+
+        if (expectedSki != null && !Objects.equals(expectedSki, trueSki)) {
+            throw new ShipAuthenticationException(
+                "The expected SKI did not match the SKI generated from their public key. This either means we accidentally tried connecting to the wrong node or they are impersonating/spoofing that node. In both cases they are not the SHIP node we want to connect to. Thus, we will close the connection."
+            );
+        }
+
+        return trueSki;
+    }
+
+    private static Optional<String> readSkiField(
+        X509Certificate certificate
+    ) throws CertificateEncodingException {
+
+        return Optional.ofNullable(SubjectKeyIdentifier.fromExtensions(
+                new JcaX509CertificateHolder(certificate).getExtensions()))
+            .map(SubjectKeyIdentifier::getKeyIdentifier)
+            .map(Hex::toHexString);
+    }
+
 }

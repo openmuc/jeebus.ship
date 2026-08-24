@@ -18,9 +18,7 @@ import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
 import org.openmuc.jeebus.ship.node.websocket.server.ShipServer;
-import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
-import org.openmuc.jeebus.ship.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,19 +30,18 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.function.Predicate;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.safelyParseSocketAddress;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Ship.class);
-    private final NamedThreadFactory namedThreadFactory = new NamedThreadFactory(
-        "jEEBus.SHIP State pool thread ");
     private ShipNodeImpl node;
 
     /**
@@ -57,7 +54,6 @@ public class Ship implements ShipInterface, AutoCloseable {
      */
     public Ship(ShipConfig nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
-        node.setClientConnectedListener(this::runConnectionDataPreparation);
     }
 
     @Override
@@ -73,12 +69,22 @@ public class Ship implements ShipInterface, AutoCloseable {
         }
     }
 
+    @Override
+    public CompletableFuture<ShipConnectionInterface> openConnection(
+        InetSocketAddress socket,
+        String path
+    ) {
+        return openConnection(
+            socket,
+            path,
+            null,
+            null
+        );
+    }
+
     /**
      * {@inheritDoc}
      *
-     * @return a CompletableFuture that completes with the connection to the
-     * device/server if the connection was successful, or fails if the connection
-     * attempt was unsuccessful
      * @implNote If a connection with the given SHIP node already exists, that
      * {@link ShipConnectionInterface} is returned immediately in a completed
      * Future. The reason for this behavior is that we want to avoid
@@ -87,85 +93,124 @@ public class Ship implements ShipInterface, AutoCloseable {
     @Override
     public CompletableFuture<ShipConnectionInterface> openConnection(
         InetSocketAddress socket,
-        String path
+        String path,
+        String expectedShipId,
+        String expectedSki
     ) {
         assertNodeAvailable();
 
-        Optional<ShipConnectionImpl> existingConnection
-            = getExistingConnection(socket);
-
-        if (existingConnection.isPresent()) {
-            log.info(
-                "Reusing existing connection to {}",
-                beautify(socket)
-            );
-            return CompletableFuture.completedFuture(existingConnection
-                .get()
-                .getApiShipConnection());
+        if (expectedSki != null && !trusts(expectedSki)) {
+             log.debug("Opening a connection to a device that is not trusted yet.");
         }
 
-        CompletableFuture<ShipConnectionInterface> connectionFuture
-            = new CompletableFuture<>();
-
-        try {
-            ShipClient client = node.createClient(socket, path);
-            ShipClientHandler clientHandler = client.getHandler();
-
-            if (!clientHandler.isShipConnRdy(5)) {
-                throw new IllegalStateException("ShipConnection not ready in time");
-            }
-
-            ShipConnectionImpl connection = clientHandler.getConnection();
-            connection.setConnectionFuture(connectionFuture);
-            runConnectionDataPreparation(connection);
-        }
-        catch (InterruptedException e) {
-            log.error("Interrupted while establishing a connection:", e);
-            Thread.currentThread().interrupt();
-            connectionFuture.completeExceptionally(e);
-        }
-        catch (Exception e) {
-            log.error("Failed to establish connection:", e);
-            connectionFuture.completeExceptionally(e);
-        }
-
-        return connectionFuture;
+        return getExistingConnection(socket, expectedShipId)
+            .map(connection -> {
+                log.info(
+                    "Reusing existing connection to {} ({})",
+                    expectedShipId,
+                    beautify(socket)
+                );
+                return CompletableFuture.completedFuture(connection.getApiShipConnection());
+            })
+            .orElseGet(() -> establishNewClientConnection(
+                socket,
+                path,
+                expectedShipId,
+                expectedSki
+            ));
     }
 
     private Optional<ShipConnectionImpl> getExistingConnection(
-        InetSocketAddress socket
+        InetSocketAddress socket,
+        String shipId
     ) {
         assertNodeAvailable();
         return node
             .getAllWebSocketHandlers()
             .stream()
-            .filter(handler -> Objects.equals(
-                socket,
-                handler.getRemoteSocketAddress()
-            ))
+            .filter(handler ->
+                Objects.equals(
+                    Optional
+                        .ofNullable(handler.getShipConnection())
+                        .map(ShipConnectionImpl::getRemoteId)
+                        // invalid SKI so we never compare null to null
+                        .orElse("invalid"),
+                    shipId
+                ) || Objects.equals(handler.getRemoteSocketAddress(), socket)
+            )
             .map(WebSocketHandler::getShipConnection)
-            .findAny();
+            .filter(Objects::nonNull)
+            .filter(Predicate.not(ShipConnectionImpl::isConnectionCloseState))
+            .findFirst();
     }
 
-    /**
-     * run the states in connection data preparation, this method is non-blocking and
-     * the states will run asynchronously
-     *
-     * @param connection
-     *     the connection that should run the connection data preparation states
-     */
-    public void runConnectionDataPreparation(ShipConnection connection) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection object should not be null");
+    private CompletableFuture<ShipConnectionInterface> establishNewClientConnection(
+        InetSocketAddress socket,
+        String path,
+        String expectedId,
+        String expectedSki
+    ) {
+        return CompletableFuture
+            .supplyAsync(() -> doClientHandshake(
+                socket,
+                path,
+                expectedId,
+                expectedSki
+            ))
+            .thenCompose(client -> client
+                .getHandler()
+                .getConnection()
+                .start()
+                .whenComplete((result, throwable) -> {
+                    if (throwable != null) {
+                        node.removeClient(client);
+                    }
+                })
+            .whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    client.stop();
+                    log.error(
+                        "Failed to establish new client connection:",
+                        throwable
+                    );
+                }
+            }));
+    }
+
+    private ShipClient doClientHandshake(
+        InetSocketAddress socket,
+        String path,
+        String expectedId,
+        String expectedSki
+    ) {
+        try {
+            ShipClient client = node.createClient(
+                socket,
+                path,
+                expectedId,
+                expectedSki
+            );
+            ShipClientHandler clientHandler = client.getHandler();
+
+            if (!clientHandler.awaitWssHandshakeCompletion(WSS_HANDSHAKE_TIMEOUT)) {
+                throw new IllegalStateException(
+                    "WSS Handshake took more than "+WSS_HANDSHAKE_TIMEOUT+" seconds."
+                );
+            }
+
+            node.addClient(client);
+
+            return client;
         }
-        ExecutorService executor = Executors.newSingleThreadExecutor(namedThreadFactory);
-        executor.execute(connection::initState);
-        executor.shutdown();
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new CompletionException(e);
+        }
     }
 
     public String getOwnSki() {
         assertNodeAvailable();
-        return node.getKeyManagement().getOwnSkiAsStr();
+        return node.getKeyManagement().getOwnSki();
     }
 
     /**
@@ -186,7 +231,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @param ski
      *     the ski to add to the trusted SKIs
      */
-    public synchronized void addTrustedSki(String ski) {
+    public void addTrustedSki(String ski) {
         assertNodeAvailable();
         if (KeyManagement.isValidSki(ski)) {
             node.getKeyManagement().addTrustedSki(ski, USER_VERIFIED_TRUST_LEVEL);
@@ -274,23 +319,12 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     /**
-     * @param listener
-     *     will be called when a new remote SHIP client connects to the server of
-     *     this node.
-     */
-    public void setClientConnectedListener(ClientConnectedListener listener) {
-        assertNodeAvailable();
-        node.setClientConnectedListener(listener);
-    }
-
-    /**
      * returns a set with all detected services, including own service
      *
      * @return the set with all detected services
      * @deprecated since 3.0.0. Please use {@link Ship#getCurrentServices}
      */
-    @Deprecated(since = "3.0.0",
-        forRemoval = true)
+    @Deprecated(since = "3.0.0", forRemoval = true)
     public Set<ServiceInfo> getServices() {
         assertNodeAvailable();
         return node.getServiceRegistry().listServices();

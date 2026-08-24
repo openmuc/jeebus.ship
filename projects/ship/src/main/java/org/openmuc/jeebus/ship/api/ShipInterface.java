@@ -16,10 +16,10 @@ import java.util.concurrent.CompletableFuture;
 public interface ShipInterface {
 
     /**
-     * opens a connection to a device/server
+     * opens a connection to a device/server assuming {@code "ship"} for the WSS path
      *
      * @param ipAddr
-     *     the IP address of the device/server to connect to. Example:
+     *     the socket address of the device/server to connect to. Example:
      *     "127.0.0.1:4059"
      * @return an object to represent this particular connection to another
      * device/server
@@ -30,7 +30,18 @@ public interface ShipInterface {
     ShipConnectionInterface openConnection(String ipAddr);
 
     /**
-     * Opens a connection to a SHIP server.
+     * @return {@link ShipInterface#openConnection(InetSocketAddress, String, String,
+     * String)} assuming {@code null} for expectedShipId and expectedSki. It is
+     * recommended to use that method instead as it is more secure.
+     */
+    CompletableFuture<ShipConnectionInterface> openConnection(
+        InetSocketAddress socket,
+        String path
+    );
+
+    /**
+     * Opens a connection to a SHIP server. Using this method is the safest way to
+     * establish SHIP connections.
      *
      * @param socket
      *     the socket address of the target SHIP server to connect to. Use
@@ -40,13 +51,23 @@ public interface ShipInterface {
      * @param path
      *     the WSS path to the SHIP server. Use {@link ShipService#getPath()} to find
      *     the path for a resolved SHIP service.
+     * @param expectedShipId
+     *     the SHIP ID we expect the remote device to have. If non-null, it is used
+     *     to retrieve already exising connections to the device. If the device
+     *     reports another SHIP ID than this, the connection is closed.
+     * @param expectedSki
+     *     the Subject Key Identifier we expect from the remote certificate. This is
+     *     used to prevent spoofing attacks.
+     *
      * @return a CompletableFuture that completes with an Interface to represent this
      * particular connection to another SHIP node, or fails if the connection attempt
      * was unsuccessful
      */
     CompletableFuture<ShipConnectionInterface> openConnection(
         InetSocketAddress socket,
-        String path
+        String path,
+        String expectedShipId,
+        String expectedSki
     );
 
     /**

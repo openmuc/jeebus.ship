@@ -206,11 +206,20 @@ public final class ConfigBuilder {
 
     /**
      * @param autoAcceptEnabled
-     *     If {@code true}, the SHIP server accepts the first incoming
-     *     connection of another device within two minutes after starting.
+     *     If {@code true}, the SHIP server accepts the first incoming connection of
+     *     another device within two minutes after starting. The trust is not
+     *     persisted.
+     *
      * @return the updated {@link ConfigBuilder}
+     *
      * @see "SHIP:12.3.1.1 Auto Accept"
+     *
+     * @deprecated since 3.0.0. Usage of the auto accept mode is discouraged by the
+     * EEBus Initiative and most stack implementers. Experience has shown even one
+     * device in auto accept mode makes setting up working EEBus networks hard and
+     * unreliable. It may be removed in future SHIP specification versions.
      */
+    @Deprecated(since = "3.0.0")
     public ConfigBuilder withAutoAcceptEnabled(boolean autoAcceptEnabled) {
         this.autoAcceptEnabled = autoAcceptEnabled;
         return this;

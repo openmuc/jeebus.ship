@@ -51,6 +51,9 @@ public class ShipNodeParameters {
     public static final int CMI_TIMEOUT = 30;
     public static final int AMI_TIMEOUT = 60;
 
+    // TODO: find out where this value is specified
+    public static final int WSS_HANDSHAKE_TIMEOUT = 5;
+
     /**
      * T_hello_init=60-240, should be constant across connections
      * Wait-For-Ready-Timer initial

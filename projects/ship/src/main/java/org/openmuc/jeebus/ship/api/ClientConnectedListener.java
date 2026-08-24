@@ -15,7 +15,11 @@ import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 /**
  * This listener can be used for the server to set a procedure to run as soon as a
  * client connects to that server.
+ *
+ * @deprecated since 3.0.0. Please use
+ * {@link ConnectionHandler#clientConnected(ShipConnectionInterface)}
  */
+@Deprecated(since = "3.0.0", forRemoval = true)
 public interface ClientConnectedListener {
     void onClientConnected(ShipConnection connection);
 }

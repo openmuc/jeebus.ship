@@ -25,6 +25,7 @@ import io.netty.handler.ssl.SslHandler;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,7 @@ import javax.annotation.Nonnull;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.concurrent.CancellationException;
 
 public class ShipClient {
     private static final Logger log = LoggerFactory.getLogger(ShipClient.class);
@@ -138,12 +140,23 @@ public class ShipClient {
     }
 
     public synchronized void stop() {
-        log.info("stopping {}", nodeContext.getLogPrefix());
-        if (handler.getConnection() != null) {
-            handler.getConnection().stopStateTimeouts();
+        if (shipNode.removeClient(this)) {
+            log.info("stopping {}", nodeContext.getLogPrefix());
+        }
+
+        ShipConnectionImpl connection = handler.getConnection();
+
+        if (connection != null) {
+            connection.stopStateTimeouts();
+            if (!connection.getConnectionFuture().isDone()) {
+                connection
+                    .getConnectionFuture()
+                    .completeExceptionally(new CancellationException(
+                        "SHIP client was stopped before connection could be established"
+                    ));
+            }
         }
         group.shutdownGracefully();
-        shipNode.removeClient(this);
     }
 
     @Nonnull

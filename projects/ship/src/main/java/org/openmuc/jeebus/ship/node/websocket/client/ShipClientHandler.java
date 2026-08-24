@@ -25,9 +25,8 @@ import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
-import java.net.InetSocketAddress;
-
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class ShipClientHandler extends WebSocketHandler {
 
@@ -59,9 +58,9 @@ public class ShipClientHandler extends WebSocketHandler {
     public void channelActive(ChannelHandlerContext ctx) {
         handshaker.handshake(ctx.channel());
 
-        int localPort = ((InetSocketAddress) ctx.channel().localAddress()).getPort();
-        log.info("client opened on port {}", localPort);
-        nodeContext.setLogPrefix("SHIP client (port " + localPort + ")");
+        String localSocket = beautify(ctx.channel().localAddress());
+        log.info("client opened on local socket {}", localSocket);
+        nodeContext.setLogPrefix("SHIP client");
 
         this.channel = ctx.channel();
     }
@@ -74,12 +73,20 @@ public class ShipClientHandler extends WebSocketHandler {
 
     @Override
     public synchronized void channelRead0(ChannelHandlerContext ctx, Object msg) {
-        Channel ch = ctx.channel();
+        Channel channel = ctx.channel();
 
         if (!handshaker.isHandshakeComplete()) {
             try {
-                handshaker.finishHandshake(ch, (FullHttpResponse) msg);
-                log.info("{} connected", nodeContext.getLogPrefix());
+                handshaker.finishHandshake(channel, (FullHttpResponse) msg);
+                log.info(
+                    "{} ({}) connected to remote server ({})",
+                    nodeContext.getLogPrefix(),
+                    beautify(channel.localAddress()),
+                    beautify(channel.remoteAddress())
+                );
+                nodeContext.setLogPrefix(nodeContext.getLogPrefix()
+                    +" to "+beautify(channel.remoteAddress())
+                );
                 handshakeFuture.setSuccess();
             }
             catch (WebSocketHandshakeException e) {
@@ -95,7 +102,7 @@ public class ShipClientHandler extends WebSocketHandler {
                 nodeContext,
                 this
             );
-            shipConnRdyLatch.countDown();
+            wssHandshakeLatch.countDown();
             return;
         }
 
@@ -152,9 +159,5 @@ public class ShipClientHandler extends WebSocketHandler {
 
     public ShipConnectionImpl getConnection() {
         return connection;
-    }
-
-    public void setConnection(ShipConnectionImpl connection) {
-        this.connection = connection;
     }
 }

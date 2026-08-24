@@ -22,11 +22,13 @@ import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
+import org.openmuc.jeebus.ship.util.ShipUtilities;
 
-import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.SERVER;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class ShipServerHandler extends WebSocketHandler {
 
@@ -40,21 +42,17 @@ public class ShipServerHandler extends WebSocketHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
+        String remoteSocket = beautify(ctx.channel().remoteAddress());
 
-        InetSocketAddress remoteAddr = (InetSocketAddress) ctx
-            .channel()
-            .remoteAddress();
-        int remotePort = remoteAddr.getPort();
         log.info(
-            "{} accepted a connection with client (port {})",
+            "{} accepted a connection with remote client ({})",
             nodeContext.getLogPrefix(),
-            remotePort
+            remoteSocket
         );
 
         // replace the logPrefix in the nodeContext with the specific one, while keeping other variables the same
-        String specificLogPrefix = nodeContext
-            .getLogPrefix()
-            .replace(")", ", client port " + remotePort + ")");
+        String specificLogPrefix = nodeContext.getLogPrefix()
+            +" to "+remoteSocket;
         nodeContext = new ShipNodeContext(
             specificLogPrefix,
             nodeContext.getConnHandler(),
@@ -94,7 +92,7 @@ public class ShipServerHandler extends WebSocketHandler {
                 if (bytes == null) {
                     log.warn(
                         "Received empty Message from {}. Closing SHIP connection.",
-                        nodeContext.getLogPrefix()
+                        connection.getRemoteId()
                     );
                     if (nodeContext.getConnHandler() != null) {
                         nodeContext
@@ -170,7 +168,7 @@ public class ShipServerHandler extends WebSocketHandler {
                 nodeContext,
                 this
             );
-            shipConnRdyLatch.countDown();
+            wssHandshakeLatch.countDown();
         }
     }
 
@@ -201,10 +199,6 @@ public class ShipServerHandler extends WebSocketHandler {
         return "wss://"
             + req.headers().get(HttpHeaderNames.HOST)
             + server.getWssPath();
-    }
-
-    public void setConnection(ShipConnectionImpl connection) {
-        this.connection = connection;
     }
 
     public Channel getChannel() {

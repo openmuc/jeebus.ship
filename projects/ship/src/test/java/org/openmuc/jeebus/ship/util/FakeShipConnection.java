@@ -10,12 +10,14 @@
 
 package org.openmuc.jeebus.ship.util;
 
+import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.view.UserInterface;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.concurrent.CompletableFuture;
 
 public class FakeShipConnection implements ShipConnection {
     private final boolean isServer;
@@ -64,12 +66,7 @@ public class FakeShipConnection implements ShipConnection {
     }
 
     @Override
-    public void setUserInterface(UserInterface userInterface) {
-        throw new UnsupportedOperationException("fake ship connection has no user interface");
-    }
-
-    @Override
-    public void initState() {
+    public CompletableFuture<ShipConnectionInterface> start() {
         throw new UnsupportedOperationException();
     }
 

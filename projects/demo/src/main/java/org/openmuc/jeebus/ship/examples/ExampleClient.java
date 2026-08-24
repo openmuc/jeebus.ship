@@ -12,17 +12,20 @@ package org.openmuc.jeebus.ship.examples;
 
 import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.node.ShipConfig;
+import org.openmuc.jeebus.ship.util.ShipUtilities;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class ExampleClient {
 
     private static Ship ship;
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws IOException, InterruptedException,
+        ExecutionException {
         /*
          implement your own ConnHandler, if used purely as client, connHandler
          can be left null
@@ -57,7 +60,7 @@ public class ExampleClient {
             }
 
             @Override
-            public void connectionEstablished(ShipConnectionInterface connection) {
+            public void clientConnected(ShipConnectionInterface connection) {
 
             }
         };
@@ -65,8 +68,8 @@ public class ExampleClient {
         // SHIP ID and serviceInstance should be unique in the network
         ShipConfig conf = ShipConfig.getBuilder()
             .withServerBindAddresses("localhost:2003")
-            .withId("EXAMPLEBRAND-EEB01M4EU-001122334456")
-            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU")
+            .withId("JEEBUS-EXAMPLE-CLIENT-1")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU1")
             .withCertificateDistinguishedName("CN=example name2")
             .withServerEnabled(false)
             .build();
@@ -74,16 +77,19 @@ public class ExampleClient {
         ship = new Ship(conf, connHandler);
 
         // replace String parameter with server IP as needed
-        CompletableFuture<ShipConnectionInterface> shipConnInterfaceFuture = ship.openConnection(
-            new InetSocketAddress("localhost", 2001),
-            "ship"
+        CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship.openConnection(
+            ShipUtilities.safelyParseSocketAddress("localhost:2001"),
+            "ship",
+            "JEEBUS-EXAMPLE-SERVER-1",
+            null
         );
 
         // Wait for the connection to be established
-        ShipConnectionInterface shipConnInterface = shipConnInterfaceFuture.join();
+        ShipConnectionInterface shipConnInterface = shipConnectionFuture.get();
 
-        byte[] exampleMsg
-            = "{\"msg\":\"example payload\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] exampleMsg = "{\"msg\":\"greetings from the client\"}"
+            .getBytes(StandardCharsets.UTF_8);
+
         shipConnInterface.sendMsg(exampleMsg);
 
         Thread.sleep(1000);

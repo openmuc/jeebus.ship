@@ -12,6 +12,7 @@ package org.openmuc.jeebus.ship.state.machine;
 
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.openmuc.jeebus.ship.view.UserInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -401,10 +402,12 @@ public class StateMachine implements StateHandlerContext {
 
     @Override
     public void setPeerSkiAuthenticated() {
-        this.shipConnection
-            .getShipNodeContext()
-            .getKeyManagement()
-            .setTrustedSkiAuthenticated(shipConnection.getRemoteSki());
+        if(!((ShipConnectionImpl) shipConnection).isForceTrusted()) {
+            this.shipConnection
+                .getShipNodeContext()
+                .getKeyManagement()
+                .setTrustedSkiAuthenticated(shipConnection.getRemoteSki());
+        }
     }
 
     public synchronized void setCommPartnerTrusted() {

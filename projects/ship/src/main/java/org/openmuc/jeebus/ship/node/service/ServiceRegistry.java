@@ -281,14 +281,6 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         }
     }
 
-    public void toggleRegisterFlag() {
-        ownTxt.setRegister(!ownTxt.getRegister());
-        if (boundSocketAddresses != null && !boundSocketAddresses.isEmpty()) {
-            unregisterAllServices();
-            registerServices(boundSocketAddresses);
-        }
-    }
-
     /**
      * unregisters all services, removes service listeners and closes all JmDNS
      * instances
@@ -423,4 +415,18 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         return Collections.list(event.getInfo().getPropertyNames()).size() > 1;
     }
 
+    public void setRegisterFlag(boolean to) {
+        if (ownTxt.getRegister() != to) {
+            ownTxt.setRegister(to);
+
+            if (boundSocketAddresses != null && !boundSocketAddresses.isEmpty()) {
+                unregisterAllServices();
+                Set<InetSocketAddress> toRegister = Set.copyOf(
+                    boundSocketAddresses
+                );
+                boundSocketAddresses = Collections.emptySet();
+                registerServices(toRegister);
+            }
+        }
+    }
 }

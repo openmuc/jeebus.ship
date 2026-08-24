@@ -11,7 +11,6 @@
 package org.openmuc.jeebus.ship.node;
 
 import io.netty.handler.ssl.SslContext;
-import org.openmuc.jeebus.ship.api.ClientConnectedListener;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
@@ -37,7 +36,6 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.openmuc.jeebus.ship.node.KeyManagement.encodeSkiAsString;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
 
 public class ShipNodeImpl {
@@ -65,8 +63,6 @@ public class ShipNodeImpl {
 
     private final ConnectionHandler connHandler;
 
-    private ClientConnectedListener clientConnectedListener;
-
     /**
      * sets up a SHIP node
      *
@@ -91,7 +87,7 @@ public class ShipNodeImpl {
 
             log.info(
                 "Key Management initialized. SKI of this node is {}",
-                keyManagement.getOwnSkiAsStr()
+                keyManagement.getOwnSki()
             );
         }
         catch (CertificateStoreException e) {
@@ -143,10 +139,6 @@ public class ShipNodeImpl {
             this,
             nodeConfig
         );
-    }
-
-    public static int getAutoAcceptWindow(int autoAcceptWindow) {
-        return autoAcceptWindow;
     }
 
     public Set<WebSocketHandler> getAllWebSocketHandlers() {
@@ -206,26 +198,30 @@ public class ShipNodeImpl {
         }
     }
 
-    public ShipClient createClient(InetSocketAddress address, String path) {
+    public ShipClient createClient(
+        InetSocketAddress address,
+        String path,
+        String expectedId,
+        String expectedSki
+    ) {
         try {
             SslContext clientCtx = sslContextFactory.generateClientSslContext(
                 keyManagement.getCert()
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
                 this.keyManagement,
-
-                nodeConfig.getId()
+                nodeConfig.getId(),
+                expectedId,
+                expectedSki
             );
             nodeCtx.setConnHandler(connHandler);
-            ShipClient client = new ShipClient(
+            return new ShipClient(
                 clientCtx,
                 address,
                 path,
                 nodeCtx,
                 this
             );
-            clients.add(client);
-            return client;
         }
         catch (InterruptedException e) {
             log.error("Exception while creating a SHIP client: ", e);
@@ -275,20 +271,17 @@ public class ShipNodeImpl {
      */
     public synchronized void enableAutoAcceptMode() {
         if (autoAcceptTimeout == null) {
-            serviceRegistry.toggleRegisterFlag();
+            serviceRegistry.setRegisterFlag(true);
 
-            int autoAcceptWindow = getAutoAcceptWindow(
-                ShipNodeParameters.AUTO_ACCEPT_WINDOW
-            );
             log.info(
                 "SHIP node starting auto accept mode, it will last for {} seconds",
-                autoAcceptWindow
+                ShipNodeParameters.AUTO_ACCEPT_WINDOW
             );
             autoAccept = true;
             ScheduledExecutorService es
                 = Executors.newSingleThreadScheduledExecutor();
             autoAcceptTimeout = es.schedule((Runnable) this::consumeAutoAccept,
-                autoAcceptWindow,
+                ShipNodeParameters.AUTO_ACCEPT_WINDOW,
                 TimeUnit.SECONDS
             );
             es.shutdown();
@@ -302,15 +295,15 @@ public class ShipNodeImpl {
      * synchronized method to check if auto accept mode is running. Cancels the
      * timeout if it is and sets auto accept to false.
      *
-     * @return <code>true</code> if SHIP node was in auto accept mode, else returns
-     * <code>false</code>
+     * @return {@code true} if SHIP node was in auto accept mode, else returns
+     * {@code false}
      */
     public synchronized boolean consumeAutoAccept() {
         if (autoAccept) {
             autoAccept = false;
             autoAcceptTimeout.cancel(true);
             autoAcceptTimeout = null;
-            serviceRegistry.toggleRegisterFlag();
+            serviceRegistry.setRegisterFlag(false);
             return true;
         }
         return false;
@@ -334,15 +327,19 @@ public class ShipNodeImpl {
         return server;
     }
 
+    /**
+     * @return an unmodifiable view of the client list
+     */
     public List<ShipClient> getClients() {
-        return clients;
+        return Collections.unmodifiableList(clients);
     }
 
-    public void setClient(List<ShipClient> clients) {
-        synchronized (this.clients) {
-            this.clients.clear();
-            this.clients.addAll(clients);
-        }
+    public void addClient(ShipClient client) {
+        clients.add(client);
+    }
+
+    public boolean removeClient(ShipClient client) {
+        return clients.remove(client);
     }
 
     public KeyManagement getKeyManagement() {
@@ -362,18 +359,6 @@ public class ShipNodeImpl {
 
     }
 
-    public ClientConnectedListener getClientConnectedListener() {
-        return clientConnectedListener;
-    }
-
-    public void setClientConnectedListener(ClientConnectedListener listener) {
-        this.clientConnectedListener = listener;
-    }
-
-    public void removeClient(ShipClient client) {
-        clients.remove(client);
-    }
-
     public synchronized boolean isDoubleConnection(String peerSki) {
         long matches = Stream
             .concat(
@@ -391,7 +376,7 @@ public class ShipNodeImpl {
     }
 
     public String getOwnSki() {
-        return encodeSkiAsString(keyManagement.getOwnSki());
+        return keyManagement.getOwnSki();
     }
 
 }

@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.state;
 
 import com.google.gson.JsonParseException;
+import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.ami.AccessMethodsMsg;
@@ -20,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 public class AccessMethodsIdentification {
     private final static Logger LOGGER = LoggerFactory.getLogger(
@@ -50,7 +52,26 @@ public class AccessMethodsIdentification {
             }
             else {
                 amMsg = MessageUtility.preprocessAmMsg(msg);
-                shipConn.connectionEstablished();
+
+                String remoteId = amMsg.getId();
+                String expectedId = shipConn.getShipNodeContext().getExpectedId();
+
+                if (remoteId == null || remoteId.isBlank()
+                ) {
+                    throw new ShipAuthenticationException(
+                        "Remote SHIP device sent accessMethods reply with an empty SHIP ID. The connection cannot be authenticated so it will be closed."
+                    );
+                }
+                else if (expectedId != null
+                    && !Objects.equals(expectedId, remoteId)
+                ){
+                    throw new ShipAuthenticationException(
+                        "The SHIP ID in the accessMethods reply does not match the ID we expected. Closing the connection."
+                    );
+                }
+                else {
+                    shipConn.connectionEstablished();
+                }
             }
         }
         catch (IllegalArgumentException | JsonParseException e) {

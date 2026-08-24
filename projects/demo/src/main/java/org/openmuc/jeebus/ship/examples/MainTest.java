@@ -60,7 +60,7 @@ public class MainTest {
             }
 
             @Override
-            public void connectionEstablished(ShipConnectionInterface connection) {
+            public void clientConnected(ShipConnectionInterface connection) {
 
             }
         };
@@ -94,7 +94,7 @@ public class MainTest {
             }
 
             @Override
-            public void connectionEstablished(ShipConnectionInterface connection) {
+            public void clientConnected(ShipConnectionInterface connection) {
 
             }
 
@@ -110,8 +110,6 @@ public class MainTest {
             .withCertificateDistinguishedName("CN=example name")
             .build();
         Ship ship = new Ship(conf1, connHandler);
-
-        ship.setClientConnectedListener(ship::runConnectionDataPreparation);
 
         ShipConfig conf2 = ShipConfig.getBuilder()
             .withId("EXAMPLEBRAND-EEB01M3EU-001122334456")
@@ -129,7 +127,9 @@ public class MainTest {
 
         CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship2.openConnection(
             new InetSocketAddress("localhost", 8080),
-            "ship"
+            "ship",
+            conf1.getId(),
+            ship.getOwnSki()
         );
 
         // Wait for the connection to be established

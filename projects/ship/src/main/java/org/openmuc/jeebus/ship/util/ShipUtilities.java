@@ -19,10 +19,12 @@ import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public class ShipUtilities {
-    public static String beautify(InetSocketAddress socket) {
-        return getStringBuilder(socket.getAddress())
+    public static String beautify(SocketAddress socket) {
+        // Any other SocketAddress implementation would be out of scope
+        InetSocketAddress cast = (InetSocketAddress) socket;
+        return getStringBuilder(cast.getAddress())
             .append(":")
-            .append(socket.getPort())
+            .append(cast.getPort())
             .toString();
     }
 

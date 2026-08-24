@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-package org.openmuc.jeebus.ship.node;
+package org.openmuc.jeebus.ship.shipconnection;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -19,8 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
+import org.openmuc.jeebus.ship.node.KeyManagement;
+import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
-import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.openmuc.jeebus.ship.state.machine.State;
 
 import static org.hamcrest.MatcherAssert.assertThat;

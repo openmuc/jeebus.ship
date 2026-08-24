@@ -16,6 +16,9 @@ public class ShipNodeContext {
 
     private final String ownShipId;
 
+    private String expectedSki;
+    private String expectedId;
+
     private final KeyManagement keyManagement;
 
     private String logPrefix;
@@ -26,8 +29,19 @@ public class ShipNodeContext {
         KeyManagement keyManagement,
         String ownShipId
     ) {
+        this(keyManagement, ownShipId, null, null);
+    }
+
+    public ShipNodeContext(
+        KeyManagement keyManagement,
+        String ownShipId,
+        String expectedId,
+        String expectedSki
+    ) {
         this.keyManagement = keyManagement;
         this.ownShipId = ownShipId;
+        this.expectedId = expectedId;
+        this.expectedSki = expectedSki;
     }
 
     public ShipNodeContext(
@@ -64,5 +78,13 @@ public class ShipNodeContext {
 
     public String getOwnShipId() {
         return ownShipId;
+    }
+
+    public String getExpectedId() {
+        return expectedId;
+    }
+
+    public String getExpectedSki() {
+        return expectedSki;
     }
 }

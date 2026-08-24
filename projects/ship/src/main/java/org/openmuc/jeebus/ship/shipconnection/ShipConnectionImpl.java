@@ -71,14 +71,14 @@ public class ShipConnectionImpl implements ShipConnection {
 
     private final String peerSki;
 
-    // TODO: maybe move to ShipNode
+    // TODO: definately move to ShipNode
     private UserInterface userInterface;
 
     // when not null, Connection Data Exchange is enabled
     private ConnectionDataExchange cde;
 
     // Future to be completed when connection is established
-    private CompletableFuture<ShipConnectionInterface> connectionFuture;
+    private final CompletableFuture<ShipConnectionInterface> connectionFuture;
     /**
      * stores outgoing CDE messages while CDE is not yet enabled.
      * they are sent immediately when CDE is enabled.
@@ -93,7 +93,6 @@ public class ShipConnectionImpl implements ShipConnection {
     private AccessMethodsIdentification ami;
     // stores an AccessMethodsRequest in case Connection Data Exchange is not enabled yet
     private final Queue<byte[]> queuedAmiMessages = new ConcurrentLinkedQueue<>();
-    private ScheduledFuture<?> amiTimeout;
 
     private final CloseHandler closeHandler = new CloseHandler(this);
 
@@ -105,24 +104,27 @@ public class ShipConnectionImpl implements ShipConnection {
     ) {
         this.role = role;
         if (trustLevel > 0) {
-            forcedTrustLevel = trustLevel;
+            this.forcedTrustLevel = trustLevel;
         } else {
-            forcedTrustLevel = -1;
+            this.forcedTrustLevel = -1;
         }
         this.nodeContext = nodeContext;
 
         this.webSocketHandler = webSocketHandler;
         this.peerSki = webSocketHandler.getPeerSki();
 
-        // TODO: eventually change to dynamically choose type of UI
-        userInterface = new CommandLineInput();
+        // TODO: make
+        this.userInterface = new CommandLineInput();
 
-        stateMachine = new StateMachine(this, userInterface);
+        this.connectionFuture = new CompletableFuture<>();
+
+        this.stateMachine = new StateMachine(this, userInterface);
     }
 
     @Override
-    public void initState() {
+    public CompletableFuture<ShipConnectionInterface> start() {
         stateMachine.begin();
+        return this.connectionFuture;
     }
 
     public void onMessage(byte[] message) {
@@ -198,7 +200,7 @@ public class ShipConnectionImpl implements ShipConnection {
         return role == Role.SERVER;
     }
 
-    public synchronized State getState() {
+    synchronized State getState() {
         return stateMachine.getState();
     }
 
@@ -254,6 +256,10 @@ public class ShipConnectionImpl implements ShipConnection {
      */
     public void disableForcedTrustLevel() {
         forcedTrustLevel = -1;
+    }
+
+    public boolean isForceTrusted() {
+        return forcedTrustLevel >= MINIMAL_TRUST_LEVEL;
     }
 
     /**
@@ -319,43 +325,36 @@ public class ShipConnectionImpl implements ShipConnection {
             ami.processMsg(queuedAmiMessages.poll());
         }
 
-        ScheduledExecutorService executor
-            = Executors.newSingleThreadScheduledExecutor();
-
-        amiTimeout = executor.schedule(
-            () -> {
-                LOGGER.warn(
-                    "{}: did not receive a proper accessMethods message containing their SHIP ID within {} seconds. Closing connection",
-                    getLogPrefix(),
-                    ShipNodeParameters.AMI_TIMEOUT
-                );
-                close();
-            },
-            ShipNodeParameters.AMI_TIMEOUT,
-            TimeUnit.SECONDS
-        );
-
-        executor.shutdown();
+        connectionFuture
+            .orTimeout(ShipNodeParameters.AMI_TIMEOUT, TimeUnit.SECONDS)
+            .whenComplete((result, throwable) -> {
+                if (throwable instanceof TimeoutException) {
+                    closeImmediately();
+                    LOGGER.warn(
+                        "{}: Closing connection: Did not receive a proper accessMethods message containing their SHIP ID within {} seconds.",
+                        getLogPrefix(),
+                        ShipNodeParameters.AMI_TIMEOUT
+                    );
+                }
+            });
     }
 
     public void connectionEstablished() {
-        if(amiTimeout.cancel(false) && nodeContext.getConnHandler() != null) {
-            // Complete the future if it exists
-            if (connectionFuture != null && !connectionFuture.isDone()) {
-                connectionFuture.complete(this);
-            }
-            // If it doesn't, we must be a server
-            else {
-                nodeContext.getConnHandler().connectionEstablished(this);
-            }
+        nodeContext.setLogPrefix(nodeContext.getLogPrefix().split("to")[0] + "to " + getRemoteId());
 
-            while (!incomingCdeQueue.isEmpty()) {
-                cde.processMsg(incomingCdeQueue.poll());
-            }
+        if (!connectionFuture.isDone()) {
+            connectionFuture.complete(this);
+        }
+        if(nodeContext.getConnHandler() != null && this.role == Role.SERVER) {
+            nodeContext.getConnHandler().clientConnected(this);
+        }
 
-            while (!outgoingCdeQueue.isEmpty()) {
-                cde.sendCDE(outgoingCdeQueue.poll());
-            }
+        while (!incomingCdeQueue.isEmpty()) {
+            cde.processMsg(incomingCdeQueue.poll());
+        }
+
+        while (!outgoingCdeQueue.isEmpty()) {
+            cde.sendCDE(outgoingCdeQueue.poll());
         }
     }
 
@@ -381,15 +380,6 @@ public class ShipConnectionImpl implements ShipConnection {
                 outgoingCdeQueue.add(cdeMsg);
             }
         }
-    }
-
-    public void setConnectionFuture(CompletableFuture<ShipConnectionInterface> connectionFuture) {
-        this.connectionFuture = connectionFuture;
-    }
-
-    @Override
-    public void setUserInterface(UserInterface userInterface) {
-        this.userInterface = userInterface;
     }
 
     @Override
@@ -430,10 +420,13 @@ public class ShipConnectionImpl implements ShipConnection {
         webSocketHandler.sendMsg(message);
     }
 
+    public CompletableFuture<ShipConnectionInterface> getConnectionFuture() {
+        return connectionFuture;
+    }
+
     public void prepareCDEShutdown() {
         // prepare shutdown and close connection if maxTime is not expired
         if (!closeHandler.getDevB().isMaxTimeExpired()) {
-            amiTimeout.cancel(false);
             LOGGER.info(
                 "{} stopped connection data exchange before maxTime was reached and will "
                     + "close the connection",
@@ -449,13 +442,22 @@ public class ShipConnectionImpl implements ShipConnection {
                 );
             }
             webSocketHandler.close();
+            if (!connectionFuture.isDone()) {
+                connectionFuture.completeExceptionally(new CancellationException(
+                    "Connection was closed."
+                ));
+            }
         }
     }
 
     @Override
     public void closeImmediately() {
         webSocketHandler.close();
-        amiTimeout.cancel(false);
+        if (!connectionFuture.isDone()) {
+            connectionFuture.completeExceptionally(new CancellationException(
+                "Connection was closed."
+            ));
+        }
     }
 
     @Override

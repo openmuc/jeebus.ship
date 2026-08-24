@@ -17,7 +17,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.ssl.SslHandler;
-import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
+import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
@@ -31,8 +31,9 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
-import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -53,7 +54,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
 
     protected Channel channel;
 
-    protected CountDownLatch shipConnRdyLatch = new CountDownLatch(1);
+    protected CountDownLatch wssHandshakeLatch = new CountDownLatch(1);
 
     protected boolean pongReceived;
 
@@ -70,7 +71,8 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         if (channel.isActive()) {
             channel.writeAndFlush(wrapInBinaryFrame(msg));
         }
-        else {
+        // On regular closures it's OK if some messages don't make it
+        else if (connection.getConnectionFuture().isCompletedExceptionally()) {
             log.error(
                 "{}: last message could not be sent as the connection is closing or already closed.\nThe message was: {}",
                 nodeContext.getLogPrefix(),
@@ -162,28 +164,36 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     }
 
     public String getPeerSki() {
-        String peerSki = this.peerSki;
-        if (peerSki == null) {
-            SslHandler sslHandler = (SslHandler) channel.pipeline().get("SslHandler#0");
-            X509Certificate certificate = null;
+        if (this.peerSki == null) {
             try {
-                Certificate[] peerCerts = sslHandler
-                    .engine()
-                    .getSession()
-                    .getPeerCertificates();
-                certificate = (X509Certificate) peerCerts[0];
+                X509Certificate certificate = Arrays
+                    .stream(channel
+                        .pipeline()
+                        .get(SslHandler.class)
+                        .engine()
+                        .getSession()
+                        .getPeerCertificates())
+                    .filter(X509Certificate.class::isInstance)
+                    .findFirst()
+                    .map(X509Certificate.class::cast)
+                    .orElseThrow();
+
+                this.peerSki = KeyManagement.getAuthenticatedPeerSki(
+                    certificate,
+                    nodeContext.getExpectedSki()
+                );
             }
-            catch (SSLPeerUnverifiedException e) {
-                log.error("Exception while getting peer certificate");
+            catch (SSLPeerUnverifiedException |
+                   NullPointerException |
+                   CertificateEncodingException e
+            ) {
+                throw new ShipAuthenticationException(
+                    "Could not generate SKI from their certificate. A secure SHIP connection is not possible.",
+                    e
+                );
             }
-            SubjectKeyIdentifier ski = null;
-            if (certificate != null) {
-                ski = KeyManagement.generateSki(certificate.getPublicKey());
-            }
-            return this.peerSki = KeyManagement.encodeSkiAsString(ski);
-        } else {
-            return peerSki;
         }
+        return this.peerSki;
     }
 
     public InetSocketAddress getRemoteSocketAddress() {
@@ -234,8 +244,10 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         }
     }
 
-    public boolean isShipConnRdy(int timeoutSeconds) throws InterruptedException {
-        return shipConnRdyLatch.await(timeoutSeconds, TimeUnit.SECONDS);
+    public boolean awaitWssHandshakeCompletion(
+        int timeoutSeconds
+    ) throws InterruptedException {
+        return wssHandshakeLatch.await(timeoutSeconds, TimeUnit.SECONDS);
     }
 
     public ShipConnectionImpl getShipConnection() {

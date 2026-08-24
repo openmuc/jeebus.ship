@@ -70,6 +70,6 @@ public interface ConnectionHandler {
      * @param connection
      *     the connection interface to communicate with the remote SHIP node
      */
-    void connectionEstablished(ShipConnectionInterface connection);
+    void clientConnected(ShipConnectionInterface connection);
 
 }
