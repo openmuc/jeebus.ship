@@ -119,7 +119,6 @@ public final class ConfigBuilder {
      * @see "SHIP:7.3.2 TXT Record"
      */
     public ConfigBuilder withId(String id) {
-        validateSizeInBytes("SHIP-ID", id);
         this.id = id;
         return this;
     }
@@ -276,7 +275,6 @@ public final class ConfigBuilder {
      * @see "SHIP:7.1 Service Instance"
      */
     public ConfigBuilder withMDnsServiceInstance(String mDnsServiceInstance) {
-        validateSizeInBytes("mDNS Service Instance", mDnsServiceInstance);
         this.mDnsServiceInstance = mDnsServiceInstance;
         return this;
     }
@@ -327,15 +325,6 @@ public final class ConfigBuilder {
     public ConfigBuilder withCertificateDistinguishedName(
         String certificateDistinguishedName
     ) {
-        try {
-            new X500Name(certificateDistinguishedName);
-        }
-        catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException(
-                "Failure when validating certificate distinguished name: ",
-                e
-            );
-        }
         this.certificateDistinguishedName = certificateDistinguishedName;
         return this;
     }
@@ -489,6 +478,19 @@ public final class ConfigBuilder {
         if (!invalidSkis.isEmpty()) {
             throw new IllegalStateException(
                 "There were invalid SKIs: " + invalidSkis
+            );
+        }
+
+        validateSizeInBytes("SHIP-ID", id);
+        validateSizeInBytes("mDNS Service Instance", mDnsServiceInstance);
+
+        try {
+            new X500Name(certificateDistinguishedName);
+        }
+        catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                "Failure when validating certificate distinguished name: ",
+                e
             );
         }
 

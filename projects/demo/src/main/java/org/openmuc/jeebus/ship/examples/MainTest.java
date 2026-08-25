@@ -23,8 +23,10 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 
+import static org.slf4j.LoggerFactory.getLogger;
+
 public class MainTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(MainTest.class);
+    private static final Logger LOGGER = getLogger(MainTest.class);
 
     public static void main(String[] args) throws IOException {
         AtomicReference<byte[]> messageReceived = new AtomicReference<>(null);

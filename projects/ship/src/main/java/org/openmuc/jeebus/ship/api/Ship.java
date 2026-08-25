@@ -213,6 +213,13 @@ public class Ship implements ShipInterface, AutoCloseable {
         return node.getKeyManagement().getOwnSki();
     }
 
+    public Set<InetSocketAddress> getServerSockets() {
+        return this.node
+            .getServer()
+            .map(ShipServer::getBoundSocketAddresses)
+            .orElse(null);
+    }
+
     /**
      * @param remoteSki
      *     the Subject Key Identifier (SKI) of the remote SHIP note in question

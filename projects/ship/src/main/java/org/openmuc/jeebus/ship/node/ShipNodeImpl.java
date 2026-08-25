@@ -357,6 +357,8 @@ public class ShipNodeImpl {
             client.setConnHandler(connHandler);
         }
 
+        serviceRegistry.setConnHandler(connHandler);
+
     }
 
     public synchronized boolean isDoubleConnection(String peerSki) {

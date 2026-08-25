@@ -45,7 +45,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private final String serviceType;
 
-    private final ConnectionHandler connHandler;
+    private ConnectionHandler connHandler;
 
     private final String hostname;
 
@@ -428,5 +428,9 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 registerServices(toRegister);
             }
         }
+    }
+
+    public void setConnHandler(ConnectionHandler connHandler) {
+        this.connHandler = connHandler;
     }
 }
