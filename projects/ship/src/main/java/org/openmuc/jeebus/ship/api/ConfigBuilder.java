@@ -79,8 +79,8 @@ public final class ConfigBuilder {
     private boolean autoAcceptEnabled = false;
     private Set<String> trustedSkis = Collections.emptySet();
 
-    private long networkInterfaceScanInterval = 10;
-    private long networkInterfaceScanInitialDelay = 5;
+    private long networkInterfaceScanInterval = 10000;
+    private Long networkInterfaceScanInitialDelay;
 
     private String mDnsServiceInstance;
     private String mDnsDomain = "local.";
@@ -88,7 +88,7 @@ public final class ConfigBuilder {
     private String type = "default";
     private String model = "default";
 
-    private CertificateStorage certificateStorage = new MemoryCertificateStorage();
+    private CertificateStorage certificateStorage;
     private int certificateValidity = 3650;
     private String certificateDistinguishedName;
 
@@ -228,15 +228,15 @@ public final class ConfigBuilder {
      * For mDNS services and the SHIP server to react to changes in the available
      * network interfaces jEEBus.SHIP does periodic scans and refreshes its server,
      * services and service listeners accordingly. Here you can configure the
-     * interval between these scans in seconds.
+     * interval between these scans in milliseconds.
      *
-     * @param intervalInSeconds
+     * @param intervalInMilliseconds
      *     the interval between network interface scans
      * @return the updated {@link ConfigBuilder}
      * @see ConfigBuilder#withNetworkInterfaceScanInitialDelay(long)
      */
-    public ConfigBuilder withNetworkInterfaceScanInterval(long intervalInSeconds) {
-        this.networkInterfaceScanInterval = intervalInSeconds;
+    public ConfigBuilder withNetworkInterfaceScanInterval(long intervalInMilliseconds) {
+        this.networkInterfaceScanInterval = intervalInMilliseconds;
         return this;
     }
 
@@ -244,7 +244,10 @@ public final class ConfigBuilder {
      * For mDNS services and the SHIP server to react to changes in the available
      * network interfaces jEEBus.SHIP does periodic scans and refreshes its server,
      * services and service listeners accordingly. Here you can configure an initial
-     * delay before the scanning starts in seconds. Defaults to {@code 5} seconds.
+     * delay before the scanning starts in milliseconds.
+     * <p>
+     * Defaults to a random value between 2000 and 5000 milliseconds. This
+     * <p>
      * This will also delay mDNS scanning as a whole to give the SHIP node some time
      * to initialize before remote SHIP services are reported.
      *
@@ -428,11 +431,16 @@ public final class ConfigBuilder {
             .withBrand(brand)
             .withType(type)
             .withModel(model)
-            .withCertificateStorage(certificateStorage)
+            .withCertificateStorage(Optional
+                .ofNullable(certificateStorage)
+                .orElse(new MemoryCertificateStorage()))
             .withCertificateValidity(certificateValidity)
             .withCertificateDistinguishedName(certificateDistinguishedName)
             .withWssPath(wssPath)
-            .withKeepAlive(keepAlive);
+            .withKeepAlive(keepAlive)
+            .withNetworkInterfaceScanInitialDelay(Optional
+                .ofNullable(networkInterfaceScanInitialDelay)
+                .orElse(getRandomInitialDelay()));
     }
 
     /**
@@ -502,14 +510,16 @@ public final class ConfigBuilder {
             theAnyAddress.isPresent(),
             autoAcceptEnabled,
             trustedSkis,
-            networkInterfaceScanInitialDelay,
+            Optional.ofNullable(networkInterfaceScanInitialDelay)
+                .orElse(getRandomInitialDelay()),
             networkInterfaceScanInterval,
             mDnsServiceInstance,
             mDnsDomain,
             brand,
             type,
             model,
-            certificateStorage,
+            Optional.ofNullable(certificateStorage)
+                .orElse(new MemoryCertificateStorage()),
             certificateValidity,
             certificateDistinguishedName,
             wssPath,
@@ -524,6 +534,10 @@ public final class ConfigBuilder {
                 + value
                 + "' SHALL NOT exceed 63 bytes");
         }
+    }
+
+    private static long getRandomInitialDelay() {
+        return new Random().nextInt(5000-2000)+2000;
     }
 
     private static Optional<InetSocketAddress> findTheAnyAddress(

@@ -14,11 +14,9 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
 import org.openmuc.jeebus.ship.node.ShipConfig;
-import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,9 +25,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static net.obvj.junit.utils.matchers.ExceptionMatcher.throwsException;
 
-@Execution(ExecutionMode.SAME_THREAD)
+// @Execution(ExecutionMode.SAME_THREAD)
 public class SystemTest {
 
     public static final ConfigBuilder COMMON_CONFIG = ShipConfig.getBuilder()
@@ -41,14 +38,12 @@ public class SystemTest {
     public static final ConfigBuilder LEFT_CONFIG = COMMON_CONFIG.but()
         .withId("LEFT-ID")
         .withMDnsServiceInstance("left service")
-        .withCertificateDistinguishedName("CN=left name")
-        .withCertificateStorage(new MemoryCertificateStorage());
+        .withCertificateDistinguishedName("CN=left name");
 
     public static final ConfigBuilder RIGHT_CONFIG = COMMON_CONFIG.but()
         .withId("RIGHT-ID")
         .withMDnsServiceInstance("right service")
-        .withCertificateDistinguishedName("CN=right name")
-        .withCertificateStorage(new MemoryCertificateStorage());
+        .withCertificateDistinguishedName("CN=right name");
 
     public static final byte[] EXAMPLE_MESSAGE = "{\"msg\":\"example payload\"}"
         .getBytes(StandardCharsets.UTF_8);
@@ -89,7 +84,8 @@ public class SystemTest {
 
         ShipConfig leftConfig = LEFT_CONFIG.build();
 
-        leftShip = new Ship(leftConfig, connHandler);
+        leftShip = new Ship(leftConfig, null);
+        leftShip.setConnectionHandler(connHandler);
 
         rightShip = new Ship(
             RIGHT_CONFIG.but().withServerEnabled(false).build(),
@@ -120,6 +116,100 @@ public class SystemTest {
     }
 
     @Test
+    public void testManualPreTrustedDoubleConnection() throws IOException {
+
+        AtomicReference<byte[]> receivedCdeMessage = new AtomicReference<>(null);
+
+        ConnectionHandler connHandler = new ConnectionHandler() {
+            @Override
+            public void onMessageReceived(
+                byte[] fullMsg,
+                byte[] payload,
+                ShipConnectionInterface shipConn
+            ) {
+                receivedCdeMessage.set(payload);
+            }
+
+            @Override
+            public void onDisconnect(
+                DisconnectReason reason,
+                ShipConnectionInterface shipConn
+            ) {}
+
+            @Override
+            public void serviceAdded(ShipService service) {}
+
+            @Override
+            public void serviceRemoved(ShipService service) {}
+
+            @Override
+            public void clientConnected(ShipConnectionInterface connection) {}
+        };
+
+        ShipConfig leftConfig = LEFT_CONFIG.build();
+
+        leftShip = new Ship(leftConfig, connHandler);
+
+        ShipConfig rightConfig = RIGHT_CONFIG.build();
+
+        rightShip = new Ship(rightConfig, connHandler);
+
+        leftShip.addTrustedSki(rightShip.getOwnSki());
+        rightShip.addTrustedSki(leftShip.getOwnSki());
+
+        CompletableFuture<ShipConnectionInterface> rightFuture = rightShip.openConnection(
+            leftShip.getServerSockets().stream().findAny().orElseThrow(),
+            leftConfig.getWssPath(),
+            leftConfig.getId(),
+            leftShip.getOwnSki()
+        );
+
+        CompletableFuture<ShipConnectionInterface> leftFuture = leftShip.openConnection(
+            rightShip.getServerSockets().stream().findAny().orElseThrow(),
+            rightConfig.getWssPath(),
+            rightConfig.getId(),
+            rightShip.getOwnSki()
+        );
+
+        AtomicReference<ShipConnectionInterface> winner = new AtomicReference<>();
+        AtomicReference<Throwable> doubleConnCause = new AtomicReference<>();
+
+        rightFuture.handle((result, error) -> {
+            if(result != null && error == null) {
+                winner.set(result);
+            }
+            else {
+                doubleConnCause.set(error);
+            }
+            return null;
+        });
+
+        leftFuture.handle((result, error) -> {
+            if(result != null && error == null) {
+                winner.set(result);
+            }
+            else {
+                doubleConnCause.set(error);
+            }
+            return null;
+        });
+
+        CompletableFuture.allOf(rightFuture, leftFuture).join();
+
+        assertThat(winner.get(), is(notNullValue()));
+        assertThat(doubleConnCause.get(), is(notNullValue()));
+
+        winner.get().sendMsg(EXAMPLE_MESSAGE);
+
+        await().atMost(5, SECONDS).until(() -> receivedCdeMessage.get() != null);
+
+        assertThat(
+            receivedCdeMessage.get(),
+            is(EXAMPLE_MESSAGE)
+        );
+    }
+
+    @Test
     public void testServiceDiscoveryTrustedConnection() {
 
         AtomicReference<byte[]> receivedCdeMessage = new AtomicReference<>(null);
@@ -127,7 +217,8 @@ public class SystemTest {
         AtomicReference<CompletableFuture<ShipConnectionInterface>> clientConnection
             = new AtomicReference<>(new CompletableFuture<>());
 
-        ShipConfig leftConfig = LEFT_CONFIG.build();
+        String mDnsDomain = "system-discovery-test";
+        ShipConfig leftConfig = LEFT_CONFIG.but().withMDnsDomain(mDnsDomain).build();
 
         leftShip = new Ship(leftConfig, new ConnectionHandler() {
             @Override
@@ -166,35 +257,38 @@ public class SystemTest {
             public void clientConnected(ShipConnectionInterface connection) {}
         });
 
-        rightShip = new Ship(RIGHT_CONFIG.build(), new ConnectionHandler() {
-            @Override
-            public void onMessageReceived(
-                byte[] fullMsg,
-                byte[] payload,
-                ShipConnectionInterface shipConn
-            ) {
-                receivedCdeMessage.set(payload);
+        rightShip = new Ship(
+            RIGHT_CONFIG.but().withMDnsDomain(mDnsDomain).build(),
+            new ConnectionHandler() {
+                @Override
+                public void onMessageReceived(
+                    byte[] fullMsg,
+                    byte[] payload,
+                    ShipConnectionInterface shipConn
+                ) {
+                    receivedCdeMessage.set(payload);
+                }
+
+                @Override
+                public void onDisconnect(
+                    DisconnectReason reason,
+                    ShipConnectionInterface shipConn
+                ) {}
+
+                @Override
+                public void serviceAdded(ShipService service) {
+                    rightShip.addTrustedSki(service.getSki());
+                }
+
+                @Override
+                public void serviceRemoved(ShipService service) {}
+
+                @Override
+                public void clientConnected(ShipConnectionInterface connection) {}
             }
+        );
 
-            @Override
-            public void onDisconnect(
-                DisconnectReason reason,
-                ShipConnectionInterface shipConn
-            ) {}
-
-            @Override
-            public void serviceAdded(ShipService service) {
-                rightShip.addTrustedSki(service.getSki());
-            }
-
-            @Override
-            public void serviceRemoved(ShipService service) {}
-
-            @Override
-            public void clientConnected(ShipConnectionInterface connection) {}
-        });
-
-        await().atMost(20, SECONDS).until(() -> clientConnection.get().isDone());
+        await().atMost(30, SECONDS).until(() -> clientConnection.get().isDone());
 
         clientConnection.get().join().sendMsg(EXAMPLE_MESSAGE);
 

@@ -78,32 +78,35 @@ public class ShipClientHandler extends WebSocketHandler {
         if (!handshaker.isHandshakeComplete()) {
             try {
                 handshaker.finishHandshake(channel, (FullHttpResponse) msg);
-                log.info(
-                    "{} ({}) connected to remote server ({})",
-                    nodeContext.getLogPrefix(),
-                    beautify(channel.localAddress()),
-                    beautify(channel.remoteAddress())
-                );
-                nodeContext.setLogPrefix(nodeContext.getLogPrefix()
-                    +" to "+beautify(channel.remoteAddress())
-                );
-                handshakeFuture.setSuccess();
+
+                if (!areWeClosing(getPeerSki())) {
+
+                    log.info(
+                        "{} ({}) connected to remote server ({})",
+                        nodeContext.getLogPrefix(),
+                        beautify(channel.localAddress()),
+                        beautify(channel.remoteAddress())
+                    );
+                    nodeContext.setLogPrefix(nodeContext.getLogPrefix()
+                        +" to "+beautify(channel.remoteAddress())
+                    );
+                    handshakeFuture.setSuccess();
+
+                    this.connection = new ShipConnectionImpl(
+                        CLIENT,
+                        getTrustLevel(),
+                        nodeContext,
+                        this
+                    );
+
+                    wssHandshakeLatch.countDown();
+                }
             }
             catch (WebSocketHandshakeException e) {
                 log.error("{} failed to connect", nodeContext.getLogPrefix());
                 handshakeFuture.setFailure(e);
+                close();
             }
-            if (node.isDoubleConnection(getPeerSki())) {
-                doubleConnProcedure(this.getPeerSki());
-            }
-            this.connection = new ShipConnectionImpl(
-                CLIENT,
-                getTrustLevel(),
-                nodeContext,
-                this
-            );
-            wssHandshakeLatch.countDown();
-            return;
         }
 
         if (msg instanceof WebSocketFrame) {
@@ -147,6 +150,7 @@ public class ShipClientHandler extends WebSocketHandler {
 
     @Override
     public void close() {
+        node.removeCurrentRemoteSki(getPeerSki());
         if(connection != null) {
             connection.stopStateTimeouts();
         }

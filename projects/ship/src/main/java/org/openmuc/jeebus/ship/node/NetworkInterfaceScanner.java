@@ -78,13 +78,17 @@ public class NetworkInterfaceScanner implements AutoCloseable {
                 .collect(toScopedAddressTreeSet());
         }
 
+        LOG.debug(
+            "delaying initial network interface scan by {} milliseconds",
+            config.getNetworkInterfaceScanInitialDelay()
+        );
         executor.scheduleWithFixedDelay(
             this::scanInterfaces,
             // Let's delay scanning and mDNS to make sure SHIP is properly
             // initialized first
             config.getNetworkInterfaceScanInitialDelay(),
             config.getNetworkInterfaceScanInterval(),
-            TimeUnit.SECONDS
+            TimeUnit.MILLISECONDS
         );
     }
 

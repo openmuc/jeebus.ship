@@ -22,9 +22,6 @@ import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
-import org.openmuc.jeebus.ship.util.ShipUtilities;
-
-import java.net.SocketAddress;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.SERVER;
@@ -91,8 +88,8 @@ public class ShipServerHandler extends WebSocketHandler {
 
                 if (bytes == null) {
                     log.warn(
-                        "Received empty Message from {}. Closing SHIP connection.",
-                        connection.getRemoteId()
+                        "{} received empty Message. Closing SHIP connection.",
+                        nodeContext.getLogPrefix()
                     );
                     if (nodeContext.getConnHandler() != null) {
                         nodeContext
@@ -159,16 +156,17 @@ public class ShipServerHandler extends WebSocketHandler {
         else {
             handshaker.handshake(ctx.channel(), req).awaitUninterruptibly();
 
-            if (node.isDoubleConnection(getPeerSki())) {
-                doubleConnProcedure(this.getPeerSki());
+            if (!areWeClosing(this.getPeerSki())) {
+                connection = new ShipConnectionImpl(
+                    SERVER,
+                    getTrustLevel(),
+                    nodeContext,
+                    this
+                );
+
+                wssHandshakeLatch.countDown();
             }
-            connection = new ShipConnectionImpl(
-                SERVER,
-                getTrustLevel(),
-                nodeContext,
-                this
-            );
-            wssHandshakeLatch.countDown();
+
         }
     }
 
@@ -207,11 +205,12 @@ public class ShipServerHandler extends WebSocketHandler {
 
     @Override
     public void close() {
+        node.removeCurrentRemoteSki(getPeerSki());
         if (connection != null) {
             connection.stopStateTimeouts();
         }
-        channel.close().awaitUninterruptibly();
         server.removeHandler(this);
+        channel.close().awaitUninterruptibly();
     }
 
     public ShipConnectionImpl getConnection() {

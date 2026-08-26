@@ -28,11 +28,7 @@ import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -46,6 +42,8 @@ public class ShipNodeImpl {
 
     private final List<ShipClient> clients
         = Collections.synchronizedList(new ArrayList<>());
+
+    private final Set<String> currentRemoteSkis = new ConcurrentSkipListSet<>();
 
     private final ShipConfig nodeConfig;
 
@@ -361,24 +359,23 @@ public class ShipNodeImpl {
 
     }
 
-    public synchronized boolean isDoubleConnection(String peerSki) {
-        long matches = Stream
-            .concat(
-                server
-                    .map(ShipServer::getHandlers)
-                    .stream()
-                    .flatMap(Collection::stream),
-                clients.stream().map(ShipClient::getHandler))
-            .map(WebSocketHandler::getPeerSki)
-            .filter(Predicate.isEqual(peerSki))
-            .count();
-        // if remote host matches the host in parameter more than once,
-        // then return true
-        return matches > 1;
+    /**
+     * @param peerSki the SKI to add
+     * @return {@link Set#add(Object)}
+     */
+    public boolean addCurrentRemoteSki(String peerSki) {
+        synchronized (currentRemoteSkis) {
+            return currentRemoteSkis.add(peerSki);
+        }
+    }
+
+    public void removeCurrentRemoteSki(String peerSki) {
+        synchronized (currentRemoteSkis) {
+            currentRemoteSkis.remove(peerSki);
+        }
     }
 
     public String getOwnSki() {
         return keyManagement.getOwnSki();
     }
-
 }

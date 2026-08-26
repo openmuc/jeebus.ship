@@ -27,6 +27,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.util.Strings;
 import org.bouncycastle.util.encoders.Hex;
 import org.openmuc.jeebus.ship.api.cert.*;
 import org.openmuc.jeebus.ship.message.MessageUtility;
@@ -113,9 +114,11 @@ public class KeyManagement {
             certificateStorage.saveCertificate(this.cert);
         }
 
-        this.ownSki = EXTENSION_UTILS.createSubjectKeyIdentifier(
-            this.cert.certificate.getPublicKey()
-        );
+        synchronized (EXTENSION_UTILS) {
+            this.ownSki = EXTENSION_UTILS.createSubjectKeyIdentifier(
+                this.cert.certificate.getPublicKey()
+            );
+        }
     }
 
     /**
@@ -123,10 +126,10 @@ public class KeyManagement {
      *
      * @param ski
      *     SubjectKeyIdentifier value
-     * @return SKI value as hex string in lower case
+     * @return SKI value as hex string in upper case
      */
     public static String encodeSkiAsString(SubjectKeyIdentifier ski) {
-        return Hex.toHexString(ski.getKeyIdentifier()).toLowerCase();
+        return Strings.toLowerCase(Hex.toHexString(ski.getKeyIdentifier()));
     }
 
     /**
@@ -296,11 +299,13 @@ public class KeyManagement {
         X509Certificate cert;
         try {
             // Add SubjectKeyIdentifier (SKI) to certificate
-            certBuilder.addExtension(
-                Extension.subjectKeyIdentifier,
-                false,
-                EXTENSION_UTILS.createSubjectKeyIdentifier(keyPair.getPublic())
-            );
+            synchronized (EXTENSION_UTILS) {
+                certBuilder.addExtension(
+                    Extension.subjectKeyIdentifier,
+                    false,
+                    EXTENSION_UTILS.createSubjectKeyIdentifier(keyPair.getPublic())
+                );
+            }
 
             // Make the cert builder a cert authority in case more certs are needed
             certBuilder.addExtension(
@@ -364,9 +369,12 @@ public class KeyManagement {
         String expectedSki
     ) throws CertificateEncodingException {
 
-        String trueSki = encodeSkiAsString(
-            EXTENSION_UTILS.createSubjectKeyIdentifier(certificate.getPublicKey())
-        );
+        String trueSki;
+        synchronized (EXTENSION_UTILS) {
+            trueSki = encodeSkiAsString(
+                EXTENSION_UTILS.createSubjectKeyIdentifier(certificate.getPublicKey())
+            );
+        }
 
         Optional<String> skiFromField = readSkiField(certificate);
 
@@ -391,10 +399,10 @@ public class KeyManagement {
         X509Certificate certificate
     ) throws CertificateEncodingException {
 
-        return Optional.ofNullable(SubjectKeyIdentifier.fromExtensions(
-                new JcaX509CertificateHolder(certificate).getExtensions()))
-            .map(SubjectKeyIdentifier::getKeyIdentifier)
-            .map(Hex::toHexString);
+        return Optional.ofNullable(
+                SubjectKeyIdentifier.fromExtensions(
+                    new JcaX509CertificateHolder(certificate).getExtensions()))
+            .map(KeyManagement::encodeSkiAsString);
     }
 
 }

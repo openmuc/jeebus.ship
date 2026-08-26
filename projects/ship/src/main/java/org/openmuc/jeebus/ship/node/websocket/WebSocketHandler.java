@@ -17,6 +17,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.ssl.SslHandler;
+import org.bouncycastle.util.encoders.Hex;
 import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.MessageUtility;
@@ -34,6 +35,7 @@ import java.net.InetSocketAddress;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -202,16 +204,22 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
 
     /**
      * TODO: change this procedure so we immediately switch to the surviving
-     *  connection, because we know which one that is by SKI comparison
-     * @param peerSki
+     *  connection. we only know this if we have the bigger SKI.
      */
-    protected synchronized void doubleConnProcedure(String peerSki) {
-        if (node.isDoubleConnection(peerSki)) {
+    protected boolean areWeClosing(String peerSki) {
+        if (!node.addCurrentRemoteSki(peerSki)) {
             log.warn("{}: double connection detected", nodeContext.getLogPrefix());
-            String ownSki = node.getOwnSki();
-            if (0 > ownSki.compareTo(peerSki)) {
-                // own ski is bigger
-                node.closeDoubleConns(this);
+
+            int comparison = Arrays.compareUnsigned(
+                Hex.decode(node.getOwnSki()),
+                Hex.decode(peerSki)
+            );
+
+            if (comparison >= 0) {
+                log.warn(
+                    "{}: we have the higher SKI value, so we are canceling this connection",
+                    nodeContext.getLogPrefix()
+                );
                 if (nodeContext.getConnHandler() != null && connection != null) {
                     nodeContext
                         .getConnHandler()
@@ -220,6 +228,14 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                             connection.getApiShipConnection()
                         );
                 }
+                this.close();
+                return true;
+            }
+            else {
+                log.warn(
+                    "{}: we have the lower SKI value, so the remote should clean up",
+                    nodeContext.getLogPrefix()
+                );
             }
             // TODO implement ping/pong frame when detecting double connection
             /*else {
@@ -242,6 +258,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                 executors.shutdown();
             }*/
         }
+        return false;
     }
 
     public boolean awaitWssHandshakeCompletion(
@@ -260,9 +277,19 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     public void exceptionCaught(
         ChannelHandlerContext ctx,
         Throwable cause
-    ) throws Exception {
-        super.exceptionCaught(ctx, cause);
+    ) {
+        if (cause instanceof ShipAuthenticationException) {
+            Optional
+                .ofNullable(connection)
+                .map(ShipConnectionImpl::getConnectionFuture)
+                .ifPresent(future -> future.completeExceptionally(cause));
+            this.close();
+        }
 
-        log.error("{} encountered exception: {}", nodeContext.getLogPrefix(), cause);
+        log.error(
+            "{} encountered exception:",
+            nodeContext.getLogPrefix(),
+            cause
+        );
     }
 }

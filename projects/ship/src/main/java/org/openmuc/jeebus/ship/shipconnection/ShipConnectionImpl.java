@@ -113,7 +113,6 @@ public class ShipConnectionImpl implements ShipConnection {
         this.webSocketHandler = webSocketHandler;
         this.peerSki = webSocketHandler.getPeerSki();
 
-        // TODO: make
         this.userInterface = new CommandLineInput();
 
         this.connectionFuture = new CompletableFuture<>();
