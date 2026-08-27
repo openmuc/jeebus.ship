@@ -18,7 +18,10 @@ import org.openmuc.jeebus.ship.node.ShipConfig;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 import static java.lang.invoke.MethodHandles.lookup;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -116,7 +119,9 @@ public class SystemTest {
     }
 
     @Test
-    public void testManualPreTrustedDoubleConnection() throws IOException {
+    @Timeout(20)
+    public void testManualPreTrustedDoubleConnection() throws IOException,
+        ExecutionException, InterruptedException {
 
         AtomicReference<byte[]> receivedCdeMessage = new AtomicReference<>(null);
 
@@ -162,39 +167,33 @@ public class SystemTest {
             leftConfig.getWssPath(),
             leftConfig.getId(),
             leftShip.getOwnSki()
-        );
+        ).orTimeout(10, SECONDS);
 
         CompletableFuture<ShipConnectionInterface> leftFuture = leftShip.openConnection(
             rightShip.getServerSockets().stream().findAny().orElseThrow(),
             rightConfig.getWssPath(),
             rightConfig.getId(),
             rightShip.getOwnSki()
-        );
+        ).orTimeout(10, SECONDS);
 
         AtomicReference<ShipConnectionInterface> winner = new AtomicReference<>();
         AtomicReference<Throwable> doubleConnCause = new AtomicReference<>();
 
-        rightFuture.handle((result, error) -> {
-            if(result != null && error == null) {
+        BiFunction<ShipConnectionInterface, Throwable, Object> handler
+            = (result, error) -> {
+            if (result != null && error == null) {
                 winner.set(result);
             }
             else {
                 doubleConnCause.set(error);
             }
             return null;
-        });
+        };
 
-        leftFuture.handle((result, error) -> {
-            if(result != null && error == null) {
-                winner.set(result);
-            }
-            else {
-                doubleConnCause.set(error);
-            }
-            return null;
-        });
-
-        CompletableFuture.allOf(rightFuture, leftFuture).join();
+        CompletableFuture.allOf(
+            leftFuture.handle(handler),
+            rightFuture.handle(handler)
+        ).join();
 
         assertThat(winner.get(), is(notNullValue()));
         assertThat(doubleConnCause.get(), is(notNullValue()));
@@ -356,7 +355,8 @@ public class SystemTest {
                     .getServerSockets()
                     .stream()
                     .findAny()
-                    .orElseThrow(), leftConfig.getWssPath()
+                    .orElseThrow(),
+                leftConfig.getWssPath()
             )
             .join();
 

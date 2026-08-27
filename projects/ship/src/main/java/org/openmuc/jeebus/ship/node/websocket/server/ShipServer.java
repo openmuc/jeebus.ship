@@ -28,12 +28,10 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
 
 public class ShipServer {
@@ -200,8 +198,9 @@ public class ShipServer {
     public synchronized void addHandler(ShipServerHandler handler) {
         Objects.requireNonNull(handler);
 
-        CompletableFuture
-            .runAsync(() -> awaitHandshakeOrThrow(handler))
+        handler
+            .getWssHandshakeFuture()
+            .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS)
             .thenRun(() -> handlers.add(handler))
             .thenCompose(ignored -> handler.getConnection().start())
             .exceptionally(throwable -> {
@@ -213,23 +212,6 @@ public class ShipServer {
                 );
                 return null;
             });
-    }
-
-    private void awaitHandshakeOrThrow(ShipServerHandler handler) {
-        try {
-            if (!handler.awaitWssHandshakeCompletion(WSS_HANDSHAKE_TIMEOUT)) {
-                throw new IllegalStateException(
-                    "WSS Handshake took more than "+WSS_HANDSHAKE_TIMEOUT+" seconds."
-                );
-            }
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new CompletionException(
-                "Interrupted while awaiting WSS handshake completion",
-                e
-            );
-        }
     }
 
     public synchronized void removeHandler(ShipServerHandler handler) {

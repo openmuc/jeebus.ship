@@ -13,7 +13,6 @@ package org.openmuc.jeebus.ship.examples;
 import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;

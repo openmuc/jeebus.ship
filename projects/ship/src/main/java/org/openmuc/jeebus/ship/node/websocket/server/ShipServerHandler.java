@@ -88,7 +88,8 @@ public class ShipServerHandler extends WebSocketHandler {
 
                 if (bytes == null) {
                     log.warn(
-                        "{} received empty Message. Closing SHIP connection.",
+                        "{} received empty/invalid Message or CloseWebSocketFrame"
+                            + ". Closing connection.",
                         nodeContext.getLogPrefix()
                     );
                     if (nodeContext.getConnHandler() != null) {
@@ -96,7 +97,7 @@ public class ShipServerHandler extends WebSocketHandler {
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                connection.getApiShipConnection()
+                                getConnection().getApiShipConnection()
                             );
                     }
                     close();
@@ -108,8 +109,8 @@ public class ShipServerHandler extends WebSocketHandler {
                         bytes = messageBuffer.toByteArray();
                         messageBuffer.reset();
 
-                        if (connection != null) {
-                            connection.onMessage(bytes);
+                        if (getConnection() != null) {
+                            getConnection().onMessage(bytes);
                         }
                         else {
                             log.warn(
@@ -156,7 +157,7 @@ public class ShipServerHandler extends WebSocketHandler {
         else {
             handshaker.handshake(ctx.channel(), req).awaitUninterruptibly();
 
-            if (!areWeClosing(this.getPeerSki())) {
+            if (!areWeClosingDoubleConnection(this.getPeerSki())) {
                 connection = new ShipConnectionImpl(
                     SERVER,
                     getTrustLevel(),
@@ -164,7 +165,7 @@ public class ShipServerHandler extends WebSocketHandler {
                     this
                 );
 
-                wssHandshakeLatch.countDown();
+                wssHandshakeFuture.complete(getConnection());
             }
 
         }
@@ -206,14 +207,17 @@ public class ShipServerHandler extends WebSocketHandler {
     @Override
     public void close() {
         node.removeCurrentRemoteSki(getPeerSki());
-        if (connection != null) {
-            connection.stopStateTimeouts();
+        if (!wssHandshakeFuture.isDone()) {
+            wssHandshakeFuture.complete(null);
+        }
+        if (getConnection() != null) {
+            if (!getConnection().getConnectionFuture().isDone()) {
+                getConnection().getConnectionFuture().complete(null);
+            }
+            getConnection().stopStateTimeouts();
         }
         server.removeHandler(this);
         channel.close().awaitUninterruptibly();
     }
 
-    public ShipConnectionImpl getConnection() {
-        return connection;
-    }
 }

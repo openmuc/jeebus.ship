@@ -151,10 +151,11 @@ public class ShipNodeImpl {
 
     public void closeDoubleConns(WebSocketHandler current) {
         List<ShipServerHandler> serverHandlerToClose = new ArrayList<>();
-        for (ShipServerHandler serverHandler : server
+        // Create a copy of the server handlers list to avoid holding the synchronized list lock during iteration
+        List<ShipServerHandler> handlersCopy = new ArrayList<>(server
             .map(ShipServer::getHandlers)
-            .orElse(Collections.emptyList())
-        ) {
+            .orElse(Collections.emptyList()));
+        for (ShipServerHandler serverHandler : handlersCopy) {
             if (serverHandler.getPeerSki().equals(current.getPeerSki())
                 && !serverHandler.equals(current)) {
                 ShipConnectionImpl shipConn = serverHandler.getShipConnection();
@@ -177,7 +178,9 @@ public class ShipNodeImpl {
         // close after loop to avoid ConcurrentModificationException
         serverHandlerToClose.forEach(ShipServerHandler::close);
 
-        for (ShipClient client : clients) {
+        // Create a copy of the clients list to avoid holding the synchronized list lock during iteration
+        List<ShipClient> clientsCopy = new ArrayList<>(clients);
+        for (ShipClient client : clientsCopy) {
             ShipClientHandler clientHandler = client.getHandler();
             if (clientHandler.getPeerSki().equals(current.getPeerSki())
                 && !clientHandler.equals(current)) {
@@ -213,17 +216,15 @@ public class ShipNodeImpl {
                 expectedSki
             );
             nodeCtx.setConnHandler(connHandler);
-            return new ShipClient(
+            ShipClient client = new ShipClient(
                 clientCtx,
                 address,
                 path,
                 nodeCtx,
                 this
             );
-        }
-        catch (InterruptedException e) {
-            log.error("Exception while creating a SHIP client: ", e);
-            Thread.currentThread().interrupt();
+            addClient(client);
+            return client;
         }
         catch (SSLException | URISyntaxException e) {
             log.error("Exception while creating a SHIP client: ", e);
@@ -314,7 +315,11 @@ public class ShipNodeImpl {
     public void stopAllClients() {
         // clone the list first to avoid ConcurrentModificationException
         List<ShipClient> clients = new ArrayList<>(this.clients);
-        clients.forEach(ShipClient::stop);
+        clients
+            .stream()
+            .filter(Objects::nonNull)
+            .peek(this::removeClient)
+            .forEach(ShipClient::stop);
     }
 
     public ServiceRegistry getServiceRegistry() {
@@ -337,6 +342,7 @@ public class ShipNodeImpl {
     }
 
     public boolean removeClient(ShipClient client) {
+        removeCurrentRemoteSki(client.getHandler().getPeerSki());
         return clients.remove(client);
     }
 
@@ -351,7 +357,9 @@ public class ShipNodeImpl {
     public void setConnHandler(ConnectionHandler connHandler) {
         server.ifPresent(server -> server.setConnHandler(connHandler));
 
-        for (ShipClient client : clients) {
+        // Create a copy of the clients list to avoid holding the synchronized list lock during iteration
+        List<ShipClient> clientsCopy = new ArrayList<>(clients);
+        for (ShipClient client : clientsCopy) {
             client.setConnHandler(connHandler);
         }
 
@@ -364,15 +372,11 @@ public class ShipNodeImpl {
      * @return {@link Set#add(Object)}
      */
     public boolean addCurrentRemoteSki(String peerSki) {
-        synchronized (currentRemoteSkis) {
-            return currentRemoteSkis.add(peerSki);
-        }
+        return currentRemoteSkis.add(peerSki);
     }
 
     public void removeCurrentRemoteSki(String peerSki) {
-        synchronized (currentRemoteSkis) {
-            currentRemoteSkis.remove(peerSki);
-        }
+        currentRemoteSkis.remove(peerSki);
     }
 
     public String getOwnSki() {

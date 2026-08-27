@@ -18,6 +18,7 @@ import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
 import org.openmuc.jeebus.ship.node.websocket.server.ShipServer;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,17 +26,15 @@ import org.slf4j.LoggerFactory;
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.function.Predicate;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
-import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.safelyParseSocketAddress;
 
@@ -112,12 +111,15 @@ public class Ship implements ShipInterface, AutoCloseable {
                 );
                 return CompletableFuture.completedFuture(connection.getApiShipConnection());
             })
-            .orElseGet(() -> establishNewClientConnection(
-                socket,
-                path,
-                expectedShipId,
-                expectedSki
-            ));
+            .orElseGet(() -> CompletableFuture.supplyAsync(() -> node.createClient(
+                    socket,
+                    path,
+                    expectedShipId,
+                    expectedSki
+                ))
+                .thenCompose(ShipClient::start)
+                .thenApply(ShipClientHandler::getConnection)
+                .thenCompose(ShipConnection::start));
     }
 
     private Optional<ShipConnectionImpl> getExistingConnection(
@@ -128,6 +130,7 @@ public class Ship implements ShipInterface, AutoCloseable {
         return node
             .getAllWebSocketHandlers()
             .stream()
+            .filter(Objects::nonNull)
             .filter(handler ->
                 Objects.equals(
                     Optional
@@ -142,70 +145,6 @@ public class Ship implements ShipInterface, AutoCloseable {
             .filter(Objects::nonNull)
             .filter(Predicate.not(ShipConnectionImpl::isConnectionCloseState))
             .findFirst();
-    }
-
-    private CompletableFuture<ShipConnectionInterface> establishNewClientConnection(
-        InetSocketAddress socket,
-        String path,
-        String expectedId,
-        String expectedSki
-    ) {
-        return CompletableFuture
-            .supplyAsync(() -> doClientHandshake(
-                socket,
-                path,
-                expectedId,
-                expectedSki
-            ))
-            .thenCompose(client -> client
-                .getHandler()
-                .getConnection()
-                .start()
-                .whenComplete((result, throwable) -> {
-                    if (throwable != null) {
-                        node.removeClient(client);
-                    }
-                })
-            .whenComplete((result, throwable) -> {
-                if (throwable != null) {
-                    client.stop();
-                    log.error(
-                        "Failed to establish new client connection:",
-                        throwable
-                    );
-                }
-            }));
-    }
-
-    private ShipClient doClientHandshake(
-        InetSocketAddress socket,
-        String path,
-        String expectedId,
-        String expectedSki
-    ) {
-        try {
-            ShipClient client = node.createClient(
-                socket,
-                path,
-                expectedId,
-                expectedSki
-            );
-            ShipClientHandler clientHandler = client.getHandler();
-
-            if (!clientHandler.awaitWssHandshakeCompletion(WSS_HANDSHAKE_TIMEOUT)) {
-                throw new IllegalStateException(
-                    "WSS Handshake took more than "+WSS_HANDSHAKE_TIMEOUT+" seconds."
-                );
-            }
-
-            node.addClient(client);
-
-            return client;
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new CompletionException(e);
-        }
     }
 
     public String getOwnSki() {
@@ -242,25 +181,25 @@ public class Ship implements ShipInterface, AutoCloseable {
         assertNodeAvailable();
         if (KeyManagement.isValidSki(ski)) {
             node.getKeyManagement().addTrustedSki(ski, USER_VERIFIED_TRUST_LEVEL);
-            synchronized (node.getServer()) {
-                node.getServer()
-                    .stream()
-                    .map(ShipServer::getHandlers)
-                    .flatMap(Collection::stream)
-                    .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
-                    .map(WebSocketHandler::getShipConnection)
-                    .filter(Objects::nonNull)
-                    .forEach(ShipConnectionImpl::trustCommPartner);
-            }
-            synchronized (node.getClients()) {
-                node.getClients()
-                    .stream()
-                    .map(ShipClient::getHandler)
-                    .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
-                    .map(ShipClientHandler::getConnection)
-                    .filter(Objects::nonNull)
-                    .forEach(ShipConnectionImpl::trustCommPartner);
-            }
+            node.getServer().ifPresent(server -> {
+                synchronized (server) {
+                    server.getHandlers()
+                        .stream()
+                        .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
+                        .map(WebSocketHandler::getShipConnection)
+                        .filter(Objects::nonNull)
+                        .forEach(ShipConnectionImpl::trustCommPartner);
+                }
+            });
+            // Don't synchronize on the clients list directly since it's already a Collections.synchronizedList
+            // Instead, create a copy to avoid holding the lock during iteration
+            List<ShipClient> clientsCopy = new ArrayList<>(node.getClients());
+            clientsCopy.stream()
+                .map(ShipClient::getHandler)
+                .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
+                .map(ShipClientHandler::getConnection)
+                .filter(Objects::nonNull)
+                .forEach(ShipConnectionImpl::trustCommPartner);
         }
     }
 

@@ -18,6 +18,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.ssl.SslHandler;
 import org.bouncycastle.util.encoders.Hex;
+import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.MessageUtility;
@@ -36,8 +37,8 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALID_MESSAGE_TYPE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
@@ -56,7 +57,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
 
     protected Channel channel;
 
-    protected CountDownLatch wssHandshakeLatch = new CountDownLatch(1);
+    protected final CompletableFuture<ShipConnectionInterface> wssHandshakeFuture;
 
     protected boolean pongReceived;
 
@@ -67,6 +68,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         super(false);
         this.nodeContext = nodeContext;
         this.node = node;
+        this.wssHandshakeFuture = new CompletableFuture<>();
     }
 
     public void sendMsg(byte[] msg) {
@@ -206,7 +208,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
      * TODO: change this procedure so we immediately switch to the surviving
      *  connection. we only know this if we have the bigger SKI.
      */
-    protected boolean areWeClosing(String peerSki) {
+    protected boolean areWeClosingDoubleConnection(String peerSki) {
         if (!node.addCurrentRemoteSki(peerSki)) {
             log.warn("{}: double connection detected", nodeContext.getLogPrefix());
 
@@ -220,14 +222,21 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                     "{}: we have the higher SKI value, so we are canceling this connection",
                     nodeContext.getLogPrefix()
                 );
-                if (nodeContext.getConnHandler() != null && connection != null) {
-                    nodeContext
-                        .getConnHandler()
-                        .onDisconnect(
-                            DisconnectReason.DOUBLE_CONNECTION,
-                            connection.getApiShipConnection()
-                        );
+
+                cancelFutures(new CancellationException(
+                    "This is a double connection we are cancelling."));
+
+                if (connection != null) {
+                    if (nodeContext.getConnHandler() != null) {
+                        nodeContext
+                            .getConnHandler()
+                            .onDisconnect(
+                                DisconnectReason.DOUBLE_CONNECTION,
+                                connection.getApiShipConnection()
+                            );
+                    }
                 }
+
                 this.close();
                 return true;
             }
@@ -261,10 +270,13 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return false;
     }
 
-    public boolean awaitWssHandshakeCompletion(
-        int timeoutSeconds
-    ) throws InterruptedException {
-        return wssHandshakeLatch.await(timeoutSeconds, TimeUnit.SECONDS);
+    protected void cancelFutures(Throwable exception) {
+        if (!wssHandshakeFuture.isDone()) {
+            wssHandshakeFuture.completeExceptionally(exception);
+        }
+        if (connection != null && !connection.getConnectionFuture().isDone()) {
+            connection.getConnectionFuture().completeExceptionally(exception);
+        }
     }
 
     public ShipConnectionImpl getShipConnection() {
@@ -291,5 +303,13 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
             nodeContext.getLogPrefix(),
             cause
         );
+    }
+
+    public CompletableFuture<ShipConnectionInterface> getWssHandshakeFuture() {
+        return wssHandshakeFuture;
+    }
+
+    public ShipConnectionImpl getConnection() {
+        return connection;
     }
 }

@@ -34,6 +34,11 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.toCompletableFuture;
 
 public class ShipClient {
     private static final Logger log = LoggerFactory.getLogger(ShipClient.class);
@@ -52,7 +57,7 @@ public class ShipClient {
 
     private EventLoopGroup group;
 
-    public static final int TIMEOUT_MILLIS = 2 * 60 * 1000;
+    public static final int BOOTSTRAP_TIMEOUT = 2 * 60;
 
     public ShipClient(
         SslContext sslContext,
@@ -60,7 +65,7 @@ public class ShipClient {
         String path,
         ShipNodeContext nodeContext,
         ShipNodeImpl shipNode
-    ) throws InterruptedException, URISyntaxException {
+    ) throws URISyntaxException {
         this.sslContext = sslContext;
         this.socket = socket;
 
@@ -76,14 +81,11 @@ public class ShipClient {
 
         this.nodeContext = nodeContext;
         this.shipNode = shipNode;
-
-        start();
     }
 
-    private void start() throws InterruptedException {
+    public CompletableFuture<ShipClientHandler> start() {
         log.info("starting client to connect to {}", uri);
 
-        // configure client
         group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
 
         handler = new ShipClientHandler(
@@ -122,21 +124,12 @@ public class ShipClient {
                 }
             });
 
-        ChannelFuture future = bootstrap.connect(socket);
-        if (!future.await(TIMEOUT_MILLIS)) {
-            log.error("Could not open a channel to {} within {} milliseconds.",
-                uri,
-                TIMEOUT_MILLIS
-            );
-        }
-        else if (!future.isSuccess()) {
-            log.error("There was an error connecting to {}",
-                uri,
-                future.cause()
-            );
-        }
-        future.sync();
-        handler.handshakeFuture().sync();
+        return toCompletableFuture(bootstrap.connect(socket))
+            .orTimeout(BOOTSTRAP_TIMEOUT, SECONDS)
+            .thenApply(ignored -> toCompletableFuture(handler.handshakeFuture()))
+            .thenApply(alsoIgnored -> handler)
+            .thenCombine(handler.getWssHandshakeFuture(), (ignored, alsoIgnored) -> handler)
+            .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS);
     }
 
     public synchronized void stop() {
@@ -173,10 +166,6 @@ public class ShipClient {
 
     public ShipClientHandler getHandler() {
         return handler;
-    }
-
-    public void setHandler(ShipClientHandler handler) {
-        this.handler = handler;
     }
 
     public void setConnHandler(ConnectionHandler connHandler) {

@@ -15,6 +15,7 @@ import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.message.MessageType;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
+import org.openmuc.jeebus.ship.message.ami.AccessMethodsMsg;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.CloseMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
@@ -355,6 +356,11 @@ public class ShipConnectionImpl implements ShipConnection {
         while (!outgoingCdeQueue.isEmpty()) {
             cde.sendCDE(outgoingCdeQueue.poll());
         }
+
+        LOGGER.info(
+            "{} successfully established SHIP connection",
+            nodeContext.getLogPrefix()
+        );
     }
 
     public void sendCdeMsg(byte[] msg) {
@@ -388,7 +394,11 @@ public class ShipConnectionImpl implements ShipConnection {
 
     @Override
     public String getRemoteId() {
-        return ami.getAmMsg().getId();
+        return Optional
+            .ofNullable(ami)
+            .map(AccessMethodsIdentification::getAmMsg)
+            .map(AccessMethodsMsg::getId)
+            .orElse(null);
     }
 
     @Override

@@ -10,11 +10,16 @@
 
 package org.openmuc.jeebus.ship.util;
 
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+
 import javax.annotation.Nonnull;
 import java.net.*;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
@@ -86,5 +91,19 @@ public class ShipUtilities {
                 e
             );
         }
+    }
+
+    public static CompletableFuture<Channel> toCompletableFuture(ChannelFuture channelFuture) {
+        CompletableFuture<Channel> completableFuture = new CompletableFuture<>();
+
+        channelFuture.addListener((ChannelFutureListener) future -> {
+            if (future.isSuccess()) {
+                completableFuture.complete(future.channel());
+            } else {
+                completableFuture.completeExceptionally(future.cause());
+            }
+        });
+
+        return completableFuture;
     }
 }

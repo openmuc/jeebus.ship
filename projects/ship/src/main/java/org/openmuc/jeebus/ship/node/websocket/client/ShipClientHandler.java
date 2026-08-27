@@ -25,6 +25,8 @@ import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
+import java.util.concurrent.CancellationException;
+
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
@@ -79,7 +81,7 @@ public class ShipClientHandler extends WebSocketHandler {
             try {
                 handshaker.finishHandshake(channel, (FullHttpResponse) msg);
 
-                if (!areWeClosing(getPeerSki())) {
+                if (!areWeClosingDoubleConnection(getPeerSki())) {
 
                     log.info(
                         "{} ({}) connected to remote server ({})",
@@ -99,7 +101,7 @@ public class ShipClientHandler extends WebSocketHandler {
                         this
                     );
 
-                    wssHandshakeLatch.countDown();
+                    getWssHandshakeFuture().complete(super.getConnection());
                 }
             }
             catch (WebSocketHandshakeException e) {
@@ -119,8 +121,8 @@ public class ShipClientHandler extends WebSocketHandler {
 
                 if (bytes == null) {
                     log.warn(
-                        "Received empty/invalid Message or CloseWebSocketFrame"
-                            + " from {}. Closing SHIP connection.",
+                        "{} received empty/invalid Message or CloseWebSocketFrame"
+                            + ". Closing connection.",
                         nodeContext.getLogPrefix()
                     );
                     if (nodeContext.getConnHandler() != null) {
@@ -128,7 +130,7 @@ public class ShipClientHandler extends WebSocketHandler {
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                connection.getApiShipConnection()
+                                super.getConnection().getApiShipConnection()
                             );
                     }
                     stopListener.stop();
@@ -140,7 +142,7 @@ public class ShipClientHandler extends WebSocketHandler {
                         bytes = messageBuffer.toByteArray();
                         messageBuffer.reset();
 
-                        connection.onMessage(bytes);
+                        super.getConnection().onMessage(bytes);
                     }
                 }
             }
@@ -151,17 +153,17 @@ public class ShipClientHandler extends WebSocketHandler {
     @Override
     public void close() {
         node.removeCurrentRemoteSki(getPeerSki());
-        if(connection != null) {
-            connection.stopStateTimeouts();
+        if (!handshakeFuture.isDone()) {
+            handshakeFuture.cancel(true);
+        }
+        cancelFutures(new CancellationException("Connection closed before it could be established"));
+        if (super.getConnection() != null) {
+            super.getConnection().stopStateTimeouts();
         }
         if (channel.isActive()) {
             channel.writeAndFlush(new CloseWebSocketFrame());
         }
         channel.close().awaitUninterruptibly();
         stopListener.stop();
-    }
-
-    public ShipConnectionImpl getConnection() {
-        return connection;
     }
 }
