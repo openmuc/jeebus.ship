@@ -191,10 +191,7 @@ public class Ship implements ShipInterface, AutoCloseable {
                         .forEach(ShipConnectionImpl::trustCommPartner);
                 }
             });
-            // Don't synchronize on the clients list directly since it's already a Collections.synchronizedList
-            // Instead, create a copy to avoid holding the lock during iteration
-            List<ShipClient> clientsCopy = new ArrayList<>(node.getClients());
-            clientsCopy.stream()
+            new ArrayList<>(node.getClients()).stream()
                 .map(ShipClient::getHandler)
                 .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
                 .map(ShipClientHandler::getConnection)

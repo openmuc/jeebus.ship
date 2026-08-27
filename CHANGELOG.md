@@ -18,6 +18,9 @@
   `AccessMethodRequests` within 60 seconds
 - Run SHIP `ConnectionDataPreparation` on new connected remote clients by default
 - Drastically improve logging
+- Check for double connections at the TLS handshake and immediately cancel
+  them if own SKI is greater
+    - else, send out a WebSocket ping according to SHIP specification
 
 ### Added
 

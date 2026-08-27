@@ -37,11 +37,11 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALID_MESSAGE_TYPE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.openmuc.jeebus.ship.message.MessageUtility.wrapInBinaryFrame;
 
 public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> {
@@ -204,10 +204,6 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return (InetSocketAddress) channel.remoteAddress();
     }
 
-    /**
-     * TODO: change this procedure so we immediately switch to the surviving
-     *  connection. we only know this if we have the bigger SKI.
-     */
     protected boolean areWeClosingDoubleConnection(String peerSki) {
         if (!node.addCurrentRemoteSki(peerSki)) {
             log.warn("{}: double connection detected", nodeContext.getLogPrefix());
@@ -217,12 +213,26 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                 Hex.decode(peerSki)
             );
 
+            // If we are double-connected to ourselves, let's also cancel...
             if (comparison >= 0) {
                 log.warn(
                     "{}: we have the higher SKI value, so we are canceling this connection",
                     nodeContext.getLogPrefix()
                 );
 
+                /* According to SHIP:12.2.2, we SHALL only keep the most recent
+                 * connection open and close all other connections to the same SHIP
+                 * node. However, it makes no sense to throw away an advanced
+                 * connection that may be already be used in SPINE in favor of a
+                 * fresh one that may yet fail. Furthermore, as SHIP does not
+                 * describe time-synchronization, there is no surefire way for client
+                 * and server to reach consensus on which is the most recent
+                 * connection. Lastly, as both roles are allowed to close connections
+                 * in certain situations, neither side can ever be sure which
+                 * connection will survive.
+                 * In conclusion, immediately canceling double connections as soon as
+                 * they arise seems to be the most reliable way of handling them.
+                 */
                 cancelFutures(new CancellationException(
                     "This is a double connection we are cancelling."));
 
@@ -245,27 +255,15 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                     "{}: we have the lower SKI value, so the remote should clean up",
                     nodeContext.getLogPrefix()
                 );
+                /* According to SHIP:12.2.2, we SHALL send a ping after 3 seconds.
+                 * Everything after that is optional.
+                 */
+                Executors.newSingleThreadScheduledExecutor().schedule(
+                    () -> channel.isActive() ? channel.writeAndFlush(new PingWebSocketFrame()) : null,
+                    3,
+                    SECONDS
+                );
             }
-            // TODO implement ping/pong frame when detecting double connection
-            /*else {
-                ScheduledExecutorService executors = Executors.newScheduledThreadPool(2);
-                executors.schedule(() -> {
-                    if (ch.isActive()) {
-                        ch.writeAndFlush(new PingWebSocketFrame());
-                        pongReceived = false;
-
-                        executors.schedule(() -> {
-                            if (ch.isActive() && !pongReceived) {
-                                if (nodeCtx.getConnHandler() != null)
-                                    nodeCtx.getConnHandler()
-                                            .onDisconnect(DisconnectReason.ERROR, connection.getApiShipConn());
-                                close();
-                            }
-                        }, nodeCtx.getConfig().getPongReceiveTimeout(), TimeUnit.SECONDS);
-                    }
-                }, 3, TimeUnit.SECONDS);
-                executors.shutdown();
-            }*/
         }
         return false;
     }

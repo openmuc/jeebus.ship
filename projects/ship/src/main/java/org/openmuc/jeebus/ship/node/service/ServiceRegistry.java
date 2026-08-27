@@ -339,8 +339,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 reportedServices.add(service);
 
                 if (connHandler != null && !isUs(service)) {
-                    connHandler.serviceAdded(service);
                     log.info("new mDNS service resolved: {}", service.getInstance());
+                    connHandler.serviceAdded(service);
                 }
 
                 log.debug(service.toString());

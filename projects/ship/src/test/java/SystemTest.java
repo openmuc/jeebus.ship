@@ -17,6 +17,7 @@ import org.openmuc.jeebus.ship.node.ShipConfig;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -167,14 +168,14 @@ public class SystemTest {
             leftConfig.getWssPath(),
             leftConfig.getId(),
             leftShip.getOwnSki()
-        ).orTimeout(10, SECONDS);
+        );
 
         CompletableFuture<ShipConnectionInterface> leftFuture = leftShip.openConnection(
             rightShip.getServerSockets().stream().findAny().orElseThrow(),
             rightConfig.getWssPath(),
             rightConfig.getId(),
             rightShip.getOwnSki()
-        ).orTimeout(10, SECONDS);
+        );
 
         AtomicReference<ShipConnectionInterface> winner = new AtomicReference<>();
         AtomicReference<Throwable> doubleConnCause = new AtomicReference<>();
@@ -197,6 +198,12 @@ public class SystemTest {
 
         assertThat(winner.get(), is(notNullValue()));
         assertThat(doubleConnCause.get(), is(notNullValue()));
+        assertThat(doubleConnCause.get(),
+            hasProperty(
+                "message",
+                is("java.util.concurrent.CancellationException: This is a double connection we are cancelling.")
+            )
+        );
 
         winner.get().sendMsg(EXAMPLE_MESSAGE);
 
