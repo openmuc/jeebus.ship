@@ -25,6 +25,7 @@ import io.netty.handler.ssl.SslHandler;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,12 @@ import javax.annotation.Nonnull;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.toCompletableFuture;
 
 public class ShipClient {
     private static final Logger log = LoggerFactory.getLogger(ShipClient.class);
@@ -50,7 +57,7 @@ public class ShipClient {
 
     private EventLoopGroup group;
 
-    public static final int TIMEOUT_MILLIS = 2 * 60 * 1000;
+    public static final int BOOTSTRAP_TIMEOUT = 2 * 60;
 
     public ShipClient(
         SslContext sslContext,
@@ -58,7 +65,7 @@ public class ShipClient {
         String path,
         ShipNodeContext nodeContext,
         ShipNodeImpl shipNode
-    ) throws InterruptedException, URISyntaxException {
+    ) throws URISyntaxException {
         this.sslContext = sslContext;
         this.socket = socket;
 
@@ -74,14 +81,11 @@ public class ShipClient {
 
         this.nodeContext = nodeContext;
         this.shipNode = shipNode;
-
-        start();
     }
 
-    private void start() throws InterruptedException {
+    public CompletableFuture<ShipClientHandler> start() {
         log.info("starting client to connect to {}", uri);
 
-        // configure client
         group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
 
         handler = new ShipClientHandler(
@@ -120,32 +124,36 @@ public class ShipClient {
                 }
             });
 
-        ChannelFuture future = bootstrap.connect(socket);
-        if (!future.await(TIMEOUT_MILLIS)) {
-            log.error("Could not open a channel to {} within {} milliseconds.",
-                uri,
-                TIMEOUT_MILLIS
+        return toCompletableFuture(bootstrap.connect(socket))
+            .orTimeout(BOOTSTRAP_TIMEOUT, SECONDS)
+            .thenCompose(ignored -> toCompletableFuture(handler.handshakeFuture()))
+            .thenApply(alsoIgnored -> handler)
+            .thenCombine(
+                handler.getWssHandshakeFuture()
+                    .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS),
+                (handler, ignored) -> handler
             );
-        }
-        else if (!future.isSuccess()) {
-            log.error("There was an error connecting to {}",
-                uri,
-                future.cause()
-            );
-        }
-        future.sync();
-        handler.handshakeFuture().sync();
     }
 
     public synchronized void stop() {
-        log.info("stopping {}", nodeContext.getLogPrefix());
-        if (handler.getConnection() != null) {
-            handler.getConnection().stopStateTimeouts();
+        if (shipNode.removeClient(this)) {
+            log.info("stopping {}", nodeContext.getLogPrefix());
+        }
+
+        ShipConnectionImpl connection = handler.getConnection();
+
+        if (connection != null) {
+            connection.stopStateTimeouts();
+            if (!connection.getConnectionFuture().isDone()) {
+                connection
+                    .getConnectionFuture()
+                    .completeExceptionally(new CancellationException(
+                        "SHIP client was stopped before connection could be established"
+                    ));
+            }
         }
         group.shutdownGracefully();
-        shipNode.removeClient(this);
     }
-
 
     @Nonnull
     private String fixPath(String what) {
@@ -161,10 +169,6 @@ public class ShipClient {
 
     public ShipClientHandler getHandler() {
         return handler;
-    }
-
-    public void setHandler(ShipClientHandler handler) {
-        this.handler = handler;
     }
 
     public void setConnHandler(ConnectionHandler connHandler) {

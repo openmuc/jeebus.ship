@@ -104,7 +104,7 @@
 
     <!-- EEBUS MESSAGE LOGGING -->
     <!-- Set to DEBUG to enable logging of all messages transmitted with SHIP -->
-    <logger name="org.openmuc.jeebus.ship.shipconnection" level="INFO"/>
+    <logger name="org.openmuc.jeebus.ship.shipconnection" level="DEBUG"/>
     <!-- Set to DEBUG to log discovered SHIP mDNS services -->
     <logger name="org.openmuc.jeebus.ship.node.service" level="DEBUG"/>
 </configuration>

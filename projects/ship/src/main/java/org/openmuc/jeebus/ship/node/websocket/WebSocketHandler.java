@@ -17,7 +17,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.ssl.SslHandler;
-import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
+import org.bouncycastle.util.encoders.Hex;
+import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
+import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
@@ -31,17 +33,18 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
-import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.concurrent.*;
 
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALID_MESSAGE_TYPE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.openmuc.jeebus.ship.message.MessageUtility.wrapInBinaryFrame;
 
-public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> implements
-    AuthenticatedConnection {
+public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -50,12 +53,11 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     protected ShipConnectionImpl connection;
 
     // cache these values so we don't have to recompute them all the time
-    private volatile transient String remoteAddress = null;
     private volatile transient String peerSki = null;
 
     protected Channel channel;
 
-    protected CountDownLatch shipConnRdyLatch = new CountDownLatch(1);
+    protected final CompletableFuture<ShipConnectionInterface> wssHandshakeFuture;
 
     protected boolean pongReceived;
 
@@ -66,13 +68,15 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         super(false);
         this.nodeContext = nodeContext;
         this.node = node;
+        this.wssHandshakeFuture = new CompletableFuture<>();
     }
 
     public void sendMsg(byte[] msg) {
         if (channel.isActive()) {
             channel.writeAndFlush(wrapInBinaryFrame(msg));
         }
-        else {
+        // On regular closures it's OK if some messages don't make it
+        else if (connection.getConnectionFuture().isCompletedExceptionally()) {
             log.error(
                 "{}: last message could not be sent as the connection is closing or already closed.\nThe message was: {}",
                 nodeContext.getLogPrefix(),
@@ -163,91 +167,114 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return trustLevel;
     }
 
-    @Override
     public String getPeerSki() {
-        String peerSki = this.peerSki;
-        if (peerSki == null) {
-            SslHandler sslHandler = (SslHandler) channel.pipeline().get("SslHandler#0");
-            X509Certificate certificate = null;
+        if (this.peerSki == null) {
             try {
-                Certificate[] peerCerts = sslHandler
-                    .engine()
-                    .getSession()
-                    .getPeerCertificates();
-                certificate = (X509Certificate) peerCerts[0];
+                X509Certificate certificate = Arrays
+                    .stream(channel
+                        .pipeline()
+                        .get(SslHandler.class)
+                        .engine()
+                        .getSession()
+                        .getPeerCertificates())
+                    .filter(X509Certificate.class::isInstance)
+                    .findFirst()
+                    .map(X509Certificate.class::cast)
+                    .orElseThrow();
+
+                this.peerSki = KeyManagement.getAuthenticatedPeerSki(
+                    certificate,
+                    nodeContext.getExpectedSki()
+                );
             }
-            catch (SSLPeerUnverifiedException e) {
-                log.error("Exception while getting peer certificate");
+            catch (SSLPeerUnverifiedException |
+                   NullPointerException |
+                   CertificateEncodingException e
+            ) {
+                throw new ShipAuthenticationException(
+                    "Could not generate SKI from their certificate. A secure SHIP connection is not possible.",
+                    e
+                );
             }
-            SubjectKeyIdentifier ski = null;
-            if (certificate != null) {
-                ski = KeyManagement.generateSki(certificate.getPublicKey());
-            }
-            return this.peerSki = KeyManagement.encodeSkiAsString(ski);
-        } else {
-            return peerSki;
         }
+        return this.peerSki;
     }
 
     public InetSocketAddress getRemoteSocketAddress() {
         return (InetSocketAddress) channel.remoteAddress();
     }
 
-    @Override
-    public String getRemoteAddress() {
-        String remoteAddress = this.remoteAddress;
-        if (remoteAddress == null) {
-            InetSocketAddress remoteAddr = (InetSocketAddress) channel.remoteAddress();
-            this.remoteAddress = remoteAddress = String.format(
-                "%s:%d",
-                remoteAddr.getAddress().getHostAddress(),
-                remoteAddr.getPort()
-            );
-        }
-        return remoteAddress;
-    }
-
-    protected synchronized void doubleConnProcedure(String peerSki) {
-        if (node.isDoubleConnection(peerSki)) {
+    protected boolean areWeClosingDoubleConnection(String peerSki) {
+        if (!node.addCurrentRemoteSki(peerSki)) {
             log.warn("{}: double connection detected", nodeContext.getLogPrefix());
-            String ownSki = node.getOwnSki();
-            if (0 > ownSki.compareTo(peerSki)) {
-                // own ski is bigger
-                node.closeDoubleConns(this);
-                if (nodeContext.getConnHandler() != null && connection != null) {
-                    nodeContext
-                        .getConnHandler()
-                        .onDisconnect(
-                            DisconnectReason.DOUBLE_CONNECTION,
-                            connection.getApiShipConn()
-                        );
-                }
-            }
-            // TODO implement ping/pong frame when detecting double connection
-            /*else {
-                ScheduledExecutorService executors = Executors.newScheduledThreadPool(2);
-                executors.schedule(() -> {
-                    if (ch.isActive()) {
-                        ch.writeAndFlush(new PingWebSocketFrame());
-                        pongReceived = false;
 
-                        executors.schedule(() -> {
-                            if (ch.isActive() && !pongReceived) {
-                                if (nodeCtx.getConnHandler() != null)
-                                    nodeCtx.getConnHandler()
-                                            .onDisconnect(DisconnectReason.ERROR, connection.getApiShipConn());
-                                close();
-                            }
-                        }, nodeCtx.getConfig().getPongReceiveTimeout(), TimeUnit.SECONDS);
+            int comparison = Arrays.compareUnsigned(
+                Hex.decode(node.getOwnSki()),
+                Hex.decode(peerSki)
+            );
+
+            // If we are double-connected to ourselves, let's also cancel...
+            if (comparison >= 0) {
+                log.warn(
+                    "{}: we have the higher SKI value, so we are canceling this connection",
+                    nodeContext.getLogPrefix()
+                );
+
+                /* According to SHIP:12.2.2, we SHALL only keep the most recent
+                 * connection open and close all other connections to the same SHIP
+                 * node. However, it makes no sense to throw away an advanced
+                 * connection that may be already be used in SPINE in favor of a
+                 * fresh one that may yet fail. Furthermore, as SHIP does not
+                 * describe time-synchronization, there is no surefire way for client
+                 * and server to reach consensus on which is the most recent
+                 * connection. Lastly, as both roles are allowed to close connections
+                 * in certain situations, neither side can ever be sure which
+                 * connection will survive.
+                 * In conclusion, immediately canceling double connections as soon as
+                 * they arise seems to be the most reliable way of handling them.
+                 */
+                cancelFutures(new CancellationException(
+                    "This is a double connection we are cancelling."));
+
+                if (connection != null) {
+                    if (nodeContext.getConnHandler() != null) {
+                        nodeContext
+                            .getConnHandler()
+                            .onDisconnect(
+                                DisconnectReason.DOUBLE_CONNECTION,
+                                connection.getApiShipConnection()
+                            );
                     }
-                }, 3, TimeUnit.SECONDS);
-                executors.shutdown();
-            }*/
+                }
+
+                this.close();
+                return true;
+            }
+            else {
+                log.warn(
+                    "{}: we have the lower SKI value, so the remote should clean up",
+                    nodeContext.getLogPrefix()
+                );
+                /* According to SHIP:12.2.2, we SHALL send a ping after 3 seconds.
+                 * Everything after that is optional.
+                 */
+                Executors.newSingleThreadScheduledExecutor().schedule(
+                    () -> channel.isActive() ? channel.writeAndFlush(new PingWebSocketFrame()) : null,
+                    3,
+                    SECONDS
+                );
+            }
         }
+        return false;
     }
 
-    public boolean isShipConnRdy(int timeoutSeconds) throws InterruptedException {
-        return shipConnRdyLatch.await(timeoutSeconds, TimeUnit.SECONDS);
+    protected void cancelFutures(Throwable exception) {
+        if (!wssHandshakeFuture.isDone()) {
+            wssHandshakeFuture.completeExceptionally(exception);
+        }
+        if (connection != null && !connection.getConnectionFuture().isDone()) {
+            connection.getConnectionFuture().completeExceptionally(exception);
+        }
     }
 
     public ShipConnectionImpl getShipConnection() {
@@ -260,9 +287,27 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     public void exceptionCaught(
         ChannelHandlerContext ctx,
         Throwable cause
-    ) throws Exception {
-        super.exceptionCaught(ctx, cause);
+    ) {
+        if (cause instanceof ShipAuthenticationException) {
+            Optional
+                .ofNullable(connection)
+                .map(ShipConnectionImpl::getConnectionFuture)
+                .ifPresent(future -> future.completeExceptionally(cause));
+            this.close();
+        }
 
-        log.error("{} encountered exception: {}", nodeContext.getLogPrefix(), cause);
+        log.error(
+            "{} encountered exception:",
+            nodeContext.getLogPrefix(),
+            cause
+        );
+    }
+
+    public CompletableFuture<ShipConnectionInterface> getWssHandshakeFuture() {
+        return wssHandshakeFuture;
+    }
+
+    public ShipConnectionImpl getConnection() {
+        return connection;
     }
 }

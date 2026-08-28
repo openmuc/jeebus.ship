@@ -11,7 +11,6 @@
 package org.openmuc.jeebus.ship.node;
 
 import io.netty.handler.ssl.SslContext;
-import org.openmuc.jeebus.ship.api.ClientConnectedListener;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
@@ -29,15 +28,10 @@ import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.openmuc.jeebus.ship.node.KeyManagement.encodeSkiAsString;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
 
 public class ShipNodeImpl {
@@ -48,6 +42,8 @@ public class ShipNodeImpl {
 
     private final List<ShipClient> clients
         = Collections.synchronizedList(new ArrayList<>());
+
+    private final Set<String> currentRemoteSkis = new ConcurrentSkipListSet<>();
 
     private final ShipConfig nodeConfig;
 
@@ -61,13 +57,9 @@ public class ShipNodeImpl {
 
     private final SslContextFactory sslContextFactory;
 
-    private final ShipNodeParameters staticConfig;
-
     private final ServiceRegistry serviceRegistry;
 
     private final ConnectionHandler connHandler;
-
-    private ClientConnectedListener clientConnectedListener;
 
     /**
      * sets up a SHIP node
@@ -93,7 +85,7 @@ public class ShipNodeImpl {
 
             log.info(
                 "Key Management initialized. SKI of this node is {}",
-                keyManagement.getOwnSkiAsStr()
+                keyManagement.getOwnSki()
             );
         }
         catch (CertificateStoreException e) {
@@ -112,8 +104,6 @@ public class ShipNodeImpl {
         // server initiated renegotiation is not supported by netty as of version 4.1
         System.setProperty("jdk.tls.rejectClientInitiatedRenegotiation", "true");
 
-        staticConfig = new ShipNodeParameters();
-
         sslContextFactory = new SslContextFactory();
 
         // Even if we do not start a server to announce via mDNS,
@@ -130,13 +120,13 @@ public class ShipNodeImpl {
                 nodeConfig.isKeepAlive()
             ));
 
-            if (nodeConfig.getAutoAcceptEnabled()) {
-                enableAutoAcceptMode();
-            }
-
             serviceRegistry.initiateTxt(
                 getOwnSki()
             );
+
+            if (nodeConfig.getAutoAcceptEnabled()) {
+                enableAutoAcceptMode();
+            }
         }
         else {
             this.server = Optional.empty();
@@ -149,10 +139,6 @@ public class ShipNodeImpl {
         );
     }
 
-    public static int getAutoAcceptWindow(int autoAcceptWindow) {
-        return autoAcceptWindow;
-    }
-
     public Set<WebSocketHandler> getAllWebSocketHandlers() {
         return Stream.concat(
             server.stream()
@@ -163,62 +149,21 @@ public class ShipNodeImpl {
         ).collect(Collectors.toSet());
     }
 
-    public void closeDoubleConns(WebSocketHandler current) {
-        List<ShipServerHandler> serverHandlerToClose = new ArrayList<>();
-        for (ShipServerHandler serverHandler : server
-            .map(ShipServer::getHandlers)
-            .orElse(Collections.emptyList())
-        ) {
-            if (serverHandler.getPeerSki().equals(current.getPeerSki())
-                && !serverHandler.equals(current)) {
-                ShipConnectionImpl shipConn = serverHandler.getShipConnection();
-                if (shipConn != null) {
-                    shipConn.stopStateTimeouts();
-                    if (shipConn.getCde() != null) {
-                        shipConn.initiateConnectionClose(
-                            100,
-                            ConnectionCloseReasonType.UNSPECIFIC
-                        );
-                    }
-                }
-                if (shipConn == null
-                    || !shipConn.isConnectionCloseState()) {
-                    log.info("close double conn initiated");
-                    serverHandlerToClose.add(serverHandler);
-                }
-            }
-        }
-        // close after loop to avoid ConcurrentModificationException
-        serverHandlerToClose.forEach(ShipServerHandler::close);
-
-        for (ShipClient client : clients) {
-            ShipClientHandler clientHandler = client.getHandler();
-            if (clientHandler.getPeerSki().equals(current.getPeerSki())
-                && !clientHandler.equals(current)) {
-                ShipConnectionImpl shipConn = clientHandler.getConnection();
-                if (shipConn.getCde() != null) {
-                    shipConn.initiateConnectionClose(
-                        100,
-                        ConnectionCloseReasonType.UNSPECIFIC
-                    );
-                }
-                else {
-                    log.info("close double conn initiated for client");
-                    clientHandler.close();
-                }
-            }
-        }
-    }
-
-    public ShipClient createClient(InetSocketAddress address, String path) {
+    public ShipClient createClient(
+        InetSocketAddress address,
+        String path,
+        String expectedId,
+        String expectedSki
+    ) {
         try {
             SslContext clientCtx = sslContextFactory.generateClientSslContext(
                 keyManagement.getCert()
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
                 this.keyManagement,
-                staticConfig,
-                nodeConfig.getId()
+                nodeConfig.getId(),
+                expectedId,
+                expectedSki
             );
             nodeCtx.setConnHandler(connHandler);
             ShipClient client = new ShipClient(
@@ -228,12 +173,8 @@ public class ShipNodeImpl {
                 nodeCtx,
                 this
             );
-            clients.add(client);
+            addClient(client);
             return client;
-        }
-        catch (InterruptedException e) {
-            log.error("Exception while creating a SHIP client: ", e);
-            Thread.currentThread().interrupt();
         }
         catch (SSLException | URISyntaxException e) {
             log.error("Exception while creating a SHIP client: ", e);
@@ -252,7 +193,6 @@ public class ShipNodeImpl {
             );
             ShipNodeContext nodeCtx = new ShipNodeContext(
                 this.keyManagement,
-                staticConfig,
                 nodeConfig.getId()
             );
             nodeCtx.setConnHandler(connHandler);
@@ -280,19 +220,17 @@ public class ShipNodeImpl {
      */
     public synchronized void enableAutoAcceptMode() {
         if (autoAcceptTimeout == null) {
-            serviceRegistry.toggleRegisterFlag();
+            serviceRegistry.setRegisterFlag(true);
 
-            int autoAcceptWindow = getAutoAcceptWindow(
-                getStaticConfig().AUTO_ACCEPT_WINDOW);
             log.info(
                 "SHIP node starting auto accept mode, it will last for {} seconds",
-                autoAcceptWindow
+                ShipNodeParameters.AUTO_ACCEPT_WINDOW
             );
             autoAccept = true;
             ScheduledExecutorService es
                 = Executors.newSingleThreadScheduledExecutor();
             autoAcceptTimeout = es.schedule((Runnable) this::consumeAutoAccept,
-                autoAcceptWindow,
+                ShipNodeParameters.AUTO_ACCEPT_WINDOW,
                 TimeUnit.SECONDS
             );
             es.shutdown();
@@ -306,15 +244,15 @@ public class ShipNodeImpl {
      * synchronized method to check if auto accept mode is running. Cancels the
      * timeout if it is and sets auto accept to false.
      *
-     * @return <code>true</code> if SHIP node was in auto accept mode, else returns
-     * <code>false</code>
+     * @return {@code true} if SHIP node was in auto accept mode, else returns
+     * {@code false}
      */
     public synchronized boolean consumeAutoAccept() {
         if (autoAccept) {
             autoAccept = false;
             autoAcceptTimeout.cancel(true);
             autoAcceptTimeout = null;
-            serviceRegistry.toggleRegisterFlag();
+            serviceRegistry.setRegisterFlag(false);
             return true;
         }
         return false;
@@ -327,7 +265,11 @@ public class ShipNodeImpl {
     public void stopAllClients() {
         // clone the list first to avoid ConcurrentModificationException
         List<ShipClient> clients = new ArrayList<>(this.clients);
-        clients.forEach(ShipClient::stop);
+        clients
+            .stream()
+            .filter(Objects::nonNull)
+            .peek(this::removeClient)
+            .forEach(ShipClient::stop);
     }
 
     public ServiceRegistry getServiceRegistry() {
@@ -338,23 +280,24 @@ public class ShipNodeImpl {
         return server;
     }
 
+    /**
+     * @return an unmodifiable view of the client list
+     */
     public List<ShipClient> getClients() {
-        return clients;
+        return Collections.unmodifiableList(clients);
     }
 
-    public void setClient(List<ShipClient> clients) {
-        synchronized (this.clients) {
-            this.clients.clear();
-            this.clients.addAll(clients);
-        }
+    public void addClient(ShipClient client) {
+        clients.add(client);
+    }
+
+    public boolean removeClient(ShipClient client) {
+        removeCurrentRemoteSki(client.getHandler().getPeerSki());
+        return clients.remove(client);
     }
 
     public KeyManagement getKeyManagement() {
         return keyManagement;
-    }
-
-    public ShipNodeParameters getStaticConfig() {
-        return this.staticConfig;
     }
 
     public ConnectionHandler getConnHandler() {
@@ -364,42 +307,29 @@ public class ShipNodeImpl {
     public void setConnHandler(ConnectionHandler connHandler) {
         server.ifPresent(server -> server.setConnHandler(connHandler));
 
-        for (ShipClient client : clients) {
+        // Create a copy of the clients list to avoid holding the synchronized list lock during iteration
+        List<ShipClient> clientsCopy = new ArrayList<>(clients);
+        for (ShipClient client : clientsCopy) {
             client.setConnHandler(connHandler);
         }
 
+        serviceRegistry.setConnHandler(connHandler);
+
     }
 
-    public ClientConnectedListener getClientConnectedListener() {
-        return clientConnectedListener;
+    /**
+     * @param peerSki the SKI to add
+     * @return {@link Set#add(Object)}
+     */
+    public boolean addCurrentRemoteSki(String peerSki) {
+        return currentRemoteSkis.add(peerSki);
     }
 
-    public void setClientConnectedListener(ClientConnectedListener listener) {
-        this.clientConnectedListener = listener;
-    }
-
-    public void removeClient(ShipClient client) {
-        clients.remove(client);
-    }
-
-    public synchronized boolean isDoubleConnection(String peerSki) {
-        long matches = Stream
-            .concat(
-                server
-                    .map(ShipServer::getHandlers)
-                    .stream()
-                    .flatMap(Collection::stream),
-                clients.stream().map(ShipClient::getHandler))
-            .map(WebSocketHandler::getPeerSki)
-            .filter(Predicate.isEqual(peerSki))
-            .count();
-        // if remote host matches the host in parameter more than once,
-        // then return true
-        return matches > 1;
+    public void removeCurrentRemoteSki(String peerSki) {
+        currentRemoteSkis.remove(peerSki);
     }
 
     public String getOwnSki() {
-        return encodeSkiAsString(keyManagement.getOwnSki());
+        return keyManagement.getOwnSki();
     }
-
 }

@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-package org.openmuc.jeebus.ship.node;
+package org.openmuc.jeebus.ship.shipconnection;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -19,8 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
-import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
+import org.openmuc.jeebus.ship.node.KeyManagement;
+import org.openmuc.jeebus.ship.node.ShipNodeContext;
+import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.state.machine.State;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -28,10 +29,11 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.parallel.ExecutionMode.SAME_THREAD;
 import static org.mockito.Mockito.when;
+import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 
 @Execution(SAME_THREAD)
 @ExtendWith(MockitoExtension.class)
-@Disabled("replace with non-global keymanagement and narrower tests")
+@Disabled("adjust to non-global keymanagement and narrow down tests")
 public class RegistrationReconnectionTest {
     private final String exampleSki = "1234AAAAFFFF1111CCCC3333EEEEDDDD99992222";
 
@@ -43,28 +45,27 @@ public class RegistrationReconnectionTest {
                 "test",
                 3650
             ),
-            new ShipNodeParameters(),
             "some-id"
     );
 
     private ShipConnectionImpl exampleConn;
 
     @Mock
-    private AuthenticatedConnection basicListenerMock;
+    private WebSocketHandler webSocketHandler;
 
     public RegistrationReconnectionTest() throws CertificateStoreException {
     }
 
     @BeforeEach
     public void setUp() {
-        when(basicListenerMock.getPeerSki()).thenReturn(exampleSki);
+        when(webSocketHandler.getPeerSki()).thenReturn(exampleSki);
         exampleCtx.getKeyManagement().clearTrustedSkis();
         exampleCtx.getKeyManagement().addTrustedSki(exampleSki, 32);
     }
 
     @Test
     public void test_registration() {
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicListenerMock);
+        exampleConn = new ShipConnectionImpl(CLIENT, 0, exampleCtx, webSocketHandler);
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
 
         KeyManagement keyManagement = exampleCtx.getKeyManagement();
@@ -80,7 +81,7 @@ public class RegistrationReconnectionTest {
         KeyManagement keyManagement = exampleCtx.getKeyManagement();
 
         keyManagement.setTrustedSkiAuthenticated(exampleSki);
-        exampleConn = new ShipConnectionImpl(false, 0, exampleCtx, basicListenerMock);
+        exampleConn = new ShipConnectionImpl(CLIENT, 0, exampleCtx, webSocketHandler);
         // see issue #61 in gitlab, for now leave the authenticated flag in, in case it is needed in the future
         assertEquals(State.CMI_INIT_START, exampleConn.getState());
 

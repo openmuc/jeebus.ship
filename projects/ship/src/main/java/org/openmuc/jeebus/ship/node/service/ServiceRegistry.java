@@ -11,7 +11,6 @@
 package org.openmuc.jeebus.ship.node.service;
 
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
-import org.openmuc.jeebus.ship.api.Ship;
 import org.openmuc.jeebus.ship.api.ShipService;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
@@ -46,7 +45,7 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
 
     private final String serviceType;
 
-    private final ConnectionHandler connHandler;
+    private ConnectionHandler connHandler;
 
     private final String hostname;
 
@@ -282,14 +281,6 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         }
     }
 
-    public void toggleRegisterFlag() {
-        if (boundSocketAddresses != null && !boundSocketAddresses.isEmpty()) {
-            unregisterAllServices();
-            ownTxt.setRegister(!ownTxt.getRegister());
-            registerServices(boundSocketAddresses);
-        }
-    }
-
     /**
      * unregisters all services, removes service listeners and closes all JmDNS
      * instances
@@ -348,8 +339,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
                 reportedServices.add(service);
 
                 if (connHandler != null && !isUs(service)) {
-                    connHandler.serviceAdded(service);
                     log.info("new mDNS service resolved: {}", service.getInstance());
+                    connHandler.serviceAdded(service);
                 }
 
                 log.debug(service.toString());
@@ -358,7 +349,8 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
     }
 
     private boolean isUs(ShipService service) {
-        return Objects.equals(service.getSki(), ownTxt.getSki())
+        return ownTxt != null
+            && Objects.equals(service.getSki(), ownTxt.getSki())
             && Objects.equals(service.getShipId(), ownTxt.getId());
     }
 
@@ -423,4 +415,22 @@ public class ServiceRegistry implements ServiceListener, AutoCloseable {
         return Collections.list(event.getInfo().getPropertyNames()).size() > 1;
     }
 
+    public void setRegisterFlag(boolean to) {
+        if (ownTxt.getRegister() != to) {
+            ownTxt.setRegister(to);
+
+            if (boundSocketAddresses != null && !boundSocketAddresses.isEmpty()) {
+                unregisterAllServices();
+                Set<InetSocketAddress> toRegister = Set.copyOf(
+                    boundSocketAddresses
+                );
+                boundSocketAddresses = Collections.emptySet();
+                registerServices(toRegister);
+            }
+        }
+    }
+
+    public void setConnHandler(ConnectionHandler connHandler) {
+        this.connHandler = connHandler;
+    }
 }

@@ -13,18 +13,19 @@ package org.openmuc.jeebus.ship.examples;
 import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+
+import static org.slf4j.LoggerFactory.getLogger;
 
 public class MainTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(MainTest.class);
+    private static final Logger LOGGER = getLogger(MainTest.class);
 
     public static void main(String[] args) throws IOException {
         AtomicReference<byte[]> messageReceived = new AtomicReference<>(null);
@@ -60,7 +61,7 @@ public class MainTest {
             }
 
             @Override
-            public void connectionDataExchangeEnabled(String ipAddr) {
+            public void clientConnected(ShipConnectionInterface connection) {
 
             }
         };
@@ -94,9 +95,10 @@ public class MainTest {
             }
 
             @Override
-            public void connectionDataExchangeEnabled(String ipAddr) {
+            public void clientConnected(ShipConnectionInterface connection) {
 
             }
+
         };
 
         Instant begin = Instant.now();
@@ -109,8 +111,6 @@ public class MainTest {
             .withCertificateDistinguishedName("CN=example name")
             .build();
         Ship ship = new Ship(conf1, connHandler);
-
-        ship.setClientConnectedListener(ship::runConnectionDataPreparation);
 
         ShipConfig conf2 = ShipConfig.getBuilder()
             .withId("EXAMPLEBRAND-EEB01M3EU-001122334456")
@@ -126,10 +126,15 @@ public class MainTest {
         Instant openConnection = Instant.now();
         LOGGER.info("Opening connection...");
 
-        ShipConnectionInterface shipConnInterface = ship2.openConnection(
+        CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship2.openConnection(
             new InetSocketAddress("localhost", 8080),
-            "ship"
+            "ship",
+            conf1.getId(),
+            ship.getOwnSki()
         );
+
+        // Wait for the connection to be established
+        ShipConnectionInterface shipConnInterface = shipConnectionFuture.join();
 
         Instant connectionReady = Instant.now();
         LOGGER.info("Connection ready, sending test message...");

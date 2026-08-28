@@ -10,57 +10,85 @@
 
 package org.openmuc.jeebus.ship.examples;
 
-import org.openmuc.jeebus.ship.api.ConnectionHandler;
-import org.openmuc.jeebus.ship.api.Ship;
+import org.openmuc.jeebus.ship.api.*;
 import org.openmuc.jeebus.ship.node.ShipConfig;
-import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
+import org.openmuc.jeebus.ship.util.ShipUtilities;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class ExampleClient {
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    private static Ship ship;
+
+    public static void main(String[] args) throws IOException, InterruptedException,
+        ExecutionException {
         /*
          implement your own ConnHandler, if used purely as client, connHandler
          can be left null
         */
-        ConnectionHandler connHandler = null;
+        ConnectionHandler connHandler = new ConnectionHandler() {
+            @Override
+            public void onMessageReceived(
+                byte[] fullMsg,
+                byte[] payload,
+                ShipConnectionInterface shipConn
+            ) {
 
-        // serviceId and serviceInstance should be unique in the network
+            }
+
+            @Override
+            public void onDisconnect(
+                DisconnectReason reason,
+                ShipConnectionInterface shipConn
+            ) {
+
+            }
+
+            @Override
+            public void serviceAdded(ShipService service) {
+                // This may also happen during while establishing the SHIP connection
+                ship.addTrustedSki(service.getSki());
+            }
+
+            @Override
+            public void serviceRemoved(ShipService service) {
+
+            }
+
+            @Override
+            public void clientConnected(ShipConnectionInterface connection) {
+
+            }
+        };
+
+        // SHIP ID and serviceInstance should be unique in the network
         ShipConfig conf = ShipConfig.getBuilder()
             .withServerBindAddresses("localhost:2003")
-            .withId("EXAMPLEBRAND-EEB01M4EU-001122334456")
-            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU")
+            .withId("JEEBUS-EXAMPLE-CLIENT-1")
+            .withMDnsServiceInstance("Dishwasher ExampleCompany EEB01M4EU1")
             .withCertificateDistinguishedName("CN=example name2")
             .withServerEnabled(false)
             .build();
 
-        Ship ship = new Ship(conf, connHandler);
-
-        /*
-         Either authenticate the communication partner with auto accept mode or add
-         their SKI to the trustedSkis list. Note that you have to know the SKI
-         beforehand if authenticating before  opening the connection
-        */
-        // ship.addTrustedSki(peerSki);
+        ship = new Ship(conf, connHandler);
 
         // replace String parameter with server IP as needed
-        ShipConnectionInterface shipConnInterface = ship.openConnection(
-            new InetSocketAddress("localhost", 2001),
-            "ship"
+        CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship.openConnection(
+            ShipUtilities.safelyParseSocketAddress("localhost:2001"),
+            "ship",
+            "JEEBUS-EXAMPLE-SERVER-1",
+            null
         );
 
-        /*
-         The communication partner can also be authenticated after opening the
-         connection.
-        */
-        String peerSki = shipConnInterface.getRemoteSki();
-        ship.addTrustedSki(peerSki);
+        // Wait for the connection to be established
+        ShipConnectionInterface shipConnInterface = shipConnectionFuture.get();
 
-        byte[] exampleMsg
-            = "{\"msg\":\"example payload\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] exampleMsg = "{\"msg\":\"greetings from the client\"}"
+            .getBytes(StandardCharsets.UTF_8);
+
         shipConnInterface.sendMsg(exampleMsg);
 
         Thread.sleep(1000);

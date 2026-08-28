@@ -11,6 +11,7 @@
 package org.openmuc.jeebus.ship.state;
 
 import com.google.gson.JsonParseException;
+import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.ami.AccessMethodsMsg;
@@ -20,23 +21,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 public class AccessMethodsIdentification {
     private final static Logger LOGGER = LoggerFactory.getLogger(
         AccessMethodsIdentification.class);
     private final ShipConnection shipConn;
 
-    private final String ownShipId;
     private AccessMethodsRequestMsg amrMsg;
     private AccessMethodsMsg amMsg;
 
     public AccessMethodsIdentification(
-        ShipConnection shipConn,
-        String ownShipId
+        ShipConnection shipConn
     ) {
         this.shipConn = shipConn;
-        this.ownShipId = ownShipId;
-        sendRequest();
     }
 
     public void processMsg(byte[] msg) {
@@ -45,25 +43,46 @@ public class AccessMethodsIdentification {
                 .contains("accessMethodsRequest")
             ) {
                 amrMsg = MessageUtility.preprocessAmrMsg(msg);
-                /* fixme: we should initialize this message with all values correctly
-                 *  according to SHIP:13.4.6.2.*/
-                shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
-                    ownShipId,
-                    new AccessMethodsMsg.DnsSd_mDns(),
-                    null
+                shipConn.sendRawMessage(
+                    ShipMessageFactory.parseAmiBody(new AccessMethodsMsg(
+                        shipConn.getShipNodeContext().getOwnShipId(),
+                        new AccessMethodsMsg.DnsSd_mDns(),
+                        null
                 )));
             }
             else {
                 amMsg = MessageUtility.preprocessAmMsg(msg);
+
+                String remoteId = amMsg.getId();
+                String expectedId = shipConn.getShipNodeContext().getExpectedId();
+
+                if (remoteId == null || remoteId.isBlank()
+                ) {
+                    throw new ShipAuthenticationException(
+                        "Remote SHIP device sent accessMethods reply with an empty SHIP ID. The connection cannot be authenticated so it will be closed."
+                    );
+                }
+                else if (expectedId != null
+                    && !Objects.equals(expectedId, remoteId)
+                ){
+                    throw new ShipAuthenticationException(
+                        "The SHIP ID in the accessMethods reply does not match the ID we expected. Closing the connection."
+                    );
+                }
+                else {
+                    shipConn.connectionEstablished();
+                }
             }
         }
         catch (IllegalArgumentException | JsonParseException e) {
-            LOGGER.error(e.getMessage());
+            LOGGER.error("Error while processing AMI message:", e);
         }
     }
 
     public void sendRequest() {
-        shipConn.sendRawMessage(ShipMessageFactory.parseAmiBody(new AccessMethodsRequestMsg()));
+        shipConn.sendRawMessage(
+            ShipMessageFactory.parseAmiBody(new AccessMethodsRequestMsg())
+        );
     }
 
     public AccessMethodsRequestMsg getAmrMsg() {

@@ -23,13 +23,12 @@ public class ClientInit implements StateHandler {
 
     @Override
     public void onEntered(State previous, StateHandlerContext context) {
-        context.sendMessage(getAnnounceMaxMessage(context));
+        context.sendMessage(getAnnounceMaxMessage());
         context.startTimeout(SpecifiedTimeout.SME_PROTH_WAIT);
         context.transitionTo(State.SME_PROT_H_STATE_CLIENT_LISTEN_CHOICE);
     }
 
-    public static byte[] getAnnounceMaxMessage(StateHandlerContext context) {
-        ShipNodeParameters config = context.getConfig();
+    public static byte[] getAnnounceMaxMessage() {
         return ShipMessageFactory.parseSmeProtHBody(
             ProtocolHandshakeTypeType.ANNOUNCE_MAX,
             ShipNodeParameters.MAJOR_VERSION,

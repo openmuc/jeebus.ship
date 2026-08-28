@@ -35,6 +35,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Objects;
+import java.util.Optional;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -295,31 +297,30 @@ public class MessageUtility {
      */
     public static String parseShipMsgToString(byte[] msg) {
         // first byte should always be binary data, MessageType, which requires different encoding
-        String msgType = Byte.toString(msg[0]);
+        Optional<MessageType> type = MessageType
+            .fromValue(msg[0]);
+
+        //CMI requires special handling because it only contains binary data
+        if (type.isPresent() && type.get() == MessageType.INIT) {
+            return String.format(
+                "MessageType: %s\nMessageValue: %s",
+                type.get(),
+                msg[1]
+            );
+        }
 
         // encode the MessageValue which is text data
         String msgValString = new String(msg, 1, msg.length-1, UTF_8);
 
         return String.format(
             "MessageType: %s\nMessageValue:\n%s",
-            msgType,
+            type.map(Objects::toString)
+                .orElse("INVALID("+msg[0]+")"),
             msgValString
         );
     }
 
-    /**
-     * parse a cmi message for logging. Requires special handling because it only
-     * contains binary data
-     *
-     * @param msg
-     *     the error message or CMI_STATE msg
-     * @return the parsed message
-     */
-    public static String parseCmiMsgToString(byte[] msg) {
-        return String.format("MessageType: %s\nMessageValue: %s", msg[0], msg[1]);
-    }
-
-    // the following helper methods for de-/serialization
+    // the following are helper methods for de-/serialization
 
     // wrap an element in an object
     public static void writeStringToObject(

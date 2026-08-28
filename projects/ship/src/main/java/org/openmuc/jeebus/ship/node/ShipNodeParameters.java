@@ -49,6 +49,10 @@ public class ShipNodeParameters {
 
     public static final int AUTO_ACCEPT_WINDOW = 60;
     public static final int CMI_TIMEOUT = 30;
+    public static final int AMI_TIMEOUT = 60;
+
+    // TODO: find out where this value is specified
+    public static final int WSS_HANDSHAKE_TIMEOUT = 5;
 
     /**
      * T_hello_init=60-240, should be constant across connections
@@ -61,4 +65,7 @@ public class ShipNodeParameters {
         return isAutoAccept ? AUTO_ACCEPT_TRUST_LEVEL : 0;
     }
 
+    private ShipNodeParameters(){
+        // Initializing this class is pointless and thus forbidden.
+    }
 }

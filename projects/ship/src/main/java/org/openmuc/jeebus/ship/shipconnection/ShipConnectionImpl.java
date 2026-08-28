@@ -10,19 +10,20 @@
 
 package org.openmuc.jeebus.ship.shipconnection;
 
-import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
+import org.openmuc.jeebus.ship.message.MessageType;
 import org.openmuc.jeebus.ship.message.MessageUtility;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
+import org.openmuc.jeebus.ship.message.ami.AccessMethodsMsg;
 import org.openmuc.jeebus.ship.message.cde.CDEMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.CloseMsg;
 import org.openmuc.jeebus.ship.message.connectionclose.ConnectionCloseReasonType;
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.node.KeyManagement;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
 import org.openmuc.jeebus.ship.node.websocket.SkiManagementInfo;
+import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.state.AccessMethodsIdentification;
 import org.openmuc.jeebus.ship.state.ConnectionDataExchange;
 import org.openmuc.jeebus.ship.state.machine.State;
@@ -32,10 +33,13 @@ import org.openmuc.jeebus.ship.view.UserInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
 
 import static org.openmuc.jeebus.ship.message.connectionclose.ConnectionClosePhaseType.CONFIRM;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.MINIMAL_TRUST_LEVEL;
@@ -45,7 +49,8 @@ public class ShipConnectionImpl implements ShipConnection {
     private static final Logger LOGGER = LoggerFactory.getLogger(ShipConnectionImpl.class);
 
     public enum Role {
-        CLIENT, SERVER
+        CLIENT,
+        SERVER
     }
 
     private final Role role;
@@ -63,118 +68,131 @@ public class ShipConnectionImpl implements ShipConnection {
      */
     private int forcedTrustLevel;
 
-    private AuthenticatedConnection connection;
+    private final WebSocketHandler webSocketHandler;
 
     private final String peerSki;
-    private boolean trustCommPartner;
 
-    // TODO: maybe move to ShipNode
+    // TODO: definately move to ShipNode
     private UserInterface userInterface;
-
-    private int selectedMajor;
-    private int selectedMinor;
-    private String selectedFormat;
 
     // when not null, Connection Data Exchange is enabled
     private ConnectionDataExchange cde;
-    // stores outgoing CDE messages while CDE is not yet enabled.
-    // they will be sent immediately when CDE becomes enabled.
-    private final Queue<CDEMsg> cdeMessageQueue = new ConcurrentLinkedQueue<>();
+
+    // Future to be completed when connection is established
+    private final CompletableFuture<ShipConnectionInterface> connectionFuture;
+    /**
+     * stores outgoing CDE messages while CDE is not yet enabled.
+     * they are sent immediately when CDE is enabled.
+     */
+    private final Queue<CDEMsg> outgoingCdeQueue = new ConcurrentLinkedQueue<>();
+    /**
+     * stores incoming CDE messages while AMI is not yet through.
+     * they are processed immediately when it is.
+     */
+    private final Queue<byte[]> incomingCdeQueue = new ConcurrentLinkedQueue<>();
 
     private AccessMethodsIdentification ami;
     // stores an AccessMethodsRequest in case Connection Data Exchange is not enabled yet
-    private byte[] queuedAmrMessage;
+    private final Queue<byte[]> queuedAmiMessages = new ConcurrentLinkedQueue<>();
 
     private final CloseHandler closeHandler = new CloseHandler(this);
 
     public ShipConnectionImpl(
-        boolean server,
+        Role role,
         int trustLevel,
         ShipNodeContext nodeContext,
-        AuthenticatedConnection connection
+        WebSocketHandler webSocketHandler
     ) {
-        this.role = server ? Role.SERVER : Role.CLIENT;
+        this.role = role;
         if (trustLevel > 0) {
-            forcedTrustLevel = trustLevel;
+            this.forcedTrustLevel = trustLevel;
         } else {
-            forcedTrustLevel = -1;
+            this.forcedTrustLevel = -1;
         }
-        this.trustCommPartner = trustLevel >= MINIMAL_TRUST_LEVEL;
         this.nodeContext = nodeContext;
 
-        this.connection = connection;
-        this.peerSki = connection.getPeerSki();
+        this.webSocketHandler = webSocketHandler;
+        this.peerSki = webSocketHandler.getPeerSki();
 
-        // TODO: eventually change to dynamically choose type of UI
-        userInterface = new CommandLineInput();
+        this.userInterface = new CommandLineInput();
 
-        stateMachine = new StateMachine(this, userInterface, getConfig());
+        this.connectionFuture = new CompletableFuture<>();
+
+        this.stateMachine = new StateMachine(this, userInterface);
     }
 
     @Override
-    public void initState() {
+    public CompletableFuture<ShipConnectionInterface> start() {
         stateMachine.begin();
+        return this.connectionFuture;
     }
 
     public void onMessage(byte[] message) {
-        LOGGER.debug("{} received message:\n" + MessageUtility.parseShipMsgToString(
-            message), getLogPrefix());
-        // message with MessageType value of 2 are processed in Connection Data Exchange
-        switch (message[0]) {
-            case 0:
-            case 1:
-                if (new String(message, StandardCharsets.UTF_8).contains(
-                    "accessMethods")) {
-                    if (cde == null) {
-                        LOGGER.warn(
-                            "access methods request was received but Connection Data"
-                                + " Exchange is not enabled"
-                        );
-                        queuedAmrMessage = message;
+        LOGGER.debug(
+            "{} received message:\n" + MessageUtility.parseShipMsgToString(message),
+            getLogPrefix()
+        );
+
+        Optional<MessageType> type = MessageType.fromValue(message[0]);
+
+        if (type.isEmpty()) {
+            LOGGER.error(
+                "{} received a message with an unrecognized MessageType: {}",
+                getLogPrefix(),
+                message[0]
+            );
+        }
+        else {
+            switch (type.get()) {
+                case INIT:
+                case CONTROL:
+                    if (new String(message, StandardCharsets.UTF_8)
+                        .contains("accessMethods")
+                    ) {
+                        if (cde == null) {
+                            LOGGER.warn(
+                                "accessMethods message was received but Connection Data"
+                                    + " Exchange is not enabled. Queuing it until it is."
+                            );
+                            queuedAmiMessages.add(message);
+                        }
+                        else {
+                            if (ami == null) {
+                                ami = new AccessMethodsIdentification(this);
+                            }
+                            ami.processMsg(message);
+                        }
+                    }
+                    else if (stateMachine.getState() == State.SME_HELLO_OK) {
+                        LOGGER.error("received message in HELLO_OK state");
                     }
                     else {
-                        if (ami == null) {
-                            ami = new AccessMethodsIdentification(
-                                this,
-                                nodeContext.getOwnShipId()
-                            );
-                        }
-                        ami.processMsg(message);
+                        stateMachine.messageReceived(message);
                     }
-                }
-                else if (stateMachine.getState() == State.SME_HELLO_OK) {
-                    LOGGER.error("received message in HELLO_OK state");
-                }
-                else {
-                    stateMachine.messageReceived(message);
-                }
-                break;
-            case 2:
-                // CDE message
-                if (cde == null) {
-                    LOGGER.warn(
-                        "message with MessageType = 2 was received but Connection Data Exchange is not enabled");
-                }
-                else {
-                    cde.processMsg(message);
-                }
-                break;
-            case 3:
-                // Connection Close message
-                if (cde != null) {
-                    closeHandler.processMsg(message);
-                } else {
-                    LOGGER.error(
-                        "Connection Close should not be requested without entering Connection Data Exchange before");
-                }
-                break;
-            default:
-                LOGGER.error(
-                    "{} received a message with an unrecognized MessageType: {}",
-                    getLogPrefix(),
-                    message[0]
-                );
-                break;
+                    break;
+                case DATA:
+                    // CDE message
+                    if (cde == null || ami == null || ami.getAmMsg() == null ) {
+                        LOGGER.debug(
+                            "Connection Data Exchange message received prematurely."
+                            + " Queuing it for later processing."
+                        );
+                        incomingCdeQueue.add(message);
+                    }
+                    else {
+                        cde.processMsg(message);
+                    }
+                    break;
+                case END:
+                    // Connection Close message
+                    if (cde != null) {
+                        closeHandler.processMsg(message);
+                    } else {
+                        LOGGER.error(
+                            "Connection Close should not be requested without entering Connection Data Exchange before");
+                    }
+                    break;
+            }
         }
     }
 
@@ -182,7 +200,7 @@ public class ShipConnectionImpl implements ShipConnection {
         return role == Role.SERVER;
     }
 
-    public synchronized State getState() {
+    synchronized State getState() {
         return stateMachine.getState();
     }
 
@@ -201,7 +219,6 @@ public class ShipConnectionImpl implements ShipConnection {
         closeHandler.initiate(maxTime, reason);
     }
 
-
     @Override
     public int getTrustLevel() {
         if (forcedTrustLevel >= 0) {
@@ -210,7 +227,7 @@ public class ShipConnectionImpl implements ShipConnection {
             SkiManagementInfo skiManagementInfo = this.nodeContext
                 .getKeyManagement()
                 .getTrustedSkis()
-                .get(connection.getPeerSki());
+                .get(webSocketHandler.getPeerSki());
             if (skiManagementInfo == null) {
                 return 0;
             } else {
@@ -241,8 +258,8 @@ public class ShipConnectionImpl implements ShipConnection {
         forcedTrustLevel = -1;
     }
 
-    public boolean trustsCommPartner() {
-        return trustCommPartner;
+    public boolean isForceTrusted() {
+        return forcedTrustLevel >= MINIMAL_TRUST_LEVEL;
     }
 
     /**
@@ -262,60 +279,11 @@ public class ShipConnectionImpl implements ShipConnection {
             throw new IllegalStateException(
                 "trust level should be higher than "+MINIMAL_TRUST_LEVEL+" to proceed");
         }
-        this.trustCommPartner = true;
         stateMachine.setCommPartnerTrusted();
     }
 
-    /**
-     * Set the communication partner to untrusted. This does not affect the trust
-     * level configured for this connection or for the partner's SKI.
-     */
-    public void distrustCommPartner() {
-        this.trustCommPartner = false;
-    }
-
-    public AuthenticatedConnection getConnection() {
-        return connection;
-    }
-
-    public void setConnection(AuthenticatedConnection basicListener) {
-        this.connection = basicListener;
-    }
-
-    public int getSelectedMajor() {
-        return selectedMajor;
-    }
-
-    public void setSelectedMajor(int selectedMajor) {
-        this.selectedMajor = selectedMajor;
-    }
-
-    public int getSelectedMinor() {
-        return selectedMinor;
-    }
-
-    public void setSelectedMinor(int selectedMinor) {
-        this.selectedMinor = selectedMinor;
-    }
-
-    public void setSelectedVersion(int major, int minor) {
-        selectedMajor = major;
-        selectedMinor = minor;
-    }
-
-    public String getSelectedFormat() {
-        return selectedFormat;
-    }
-
-    public void setSelectedFormat(String selectedFormat) {
-        this.selectedFormat = selectedFormat;
-    }
-
-    public ShipConnectionInterface getApiShipConn() {
+    public ShipConnectionInterface getApiShipConnection() {
         return this;
-    }
-
-    public void setApiShipConn(ShipConnectionInterface shipConnInterface) {
     }
 
     public boolean isConnectionCloseState() {
@@ -324,10 +292,6 @@ public class ShipConnectionImpl implements ShipConnection {
 
     public ShipNodeContext getShipNodeContext() {
         return this.nodeContext;
-    }
-
-    public ShipNodeParameters getConfig() {
-        return nodeContext.getConfig();
     }
 
     public String getLogPrefix() {
@@ -344,32 +308,59 @@ public class ShipConnectionImpl implements ShipConnection {
                 "Connection Data Exchange should be enabled before requesting access methods");
         }
 
-        if (!isServer()) {
-            throw new IllegalStateException(
-                "Only servers should request access methods");
-        }
-
         ami.sendRequest();
     }
 
     @Override
     public void enableConnectionDataExchange() {
-        ConnectionHandler connHandler = nodeContext.getConnHandler();
         cde = new ConnectionDataExchange(
             this,
-            connHandler
+            nodeContext.getConnHandler()
         );
-        CDEMsg queuedMsg;
-        while ((queuedMsg = cdeMessageQueue.poll()) != null) {
-            cde.sendCDE(queuedMsg);
+        if (ami == null) {
+            ami = new AccessMethodsIdentification(this);
         }
-        ami = new AccessMethodsIdentification(this, nodeContext.getOwnShipId());
-        if (queuedAmrMessage != null) {
-            ami.processMsg(queuedAmrMessage);
+        ami.sendRequest();
+        while (!queuedAmiMessages.isEmpty()) {
+            ami.processMsg(queuedAmiMessages.poll());
         }
-        if (Objects.nonNull(connHandler)) {
-            connHandler.connectionDataExchangeEnabled(getRemoteAddress());
+
+        connectionFuture
+            .orTimeout(ShipNodeParameters.AMI_TIMEOUT, TimeUnit.SECONDS)
+            .whenComplete((result, throwable) -> {
+                if (throwable instanceof TimeoutException) {
+                    closeImmediately();
+                    LOGGER.warn(
+                        "{}: Closing connection: Did not receive a proper accessMethods message containing their SHIP ID within {} seconds.",
+                        getLogPrefix(),
+                        ShipNodeParameters.AMI_TIMEOUT
+                    );
+                }
+            });
+    }
+
+    public void connectionEstablished() {
+        nodeContext.setLogPrefix(nodeContext.getLogPrefix().split("to")[0] + "to " + getRemoteId());
+
+        if (!connectionFuture.isDone()) {
+            connectionFuture.complete(this);
         }
+        if(nodeContext.getConnHandler() != null && this.role == Role.SERVER) {
+            nodeContext.getConnHandler().clientConnected(this);
+        }
+
+        while (!incomingCdeQueue.isEmpty()) {
+            cde.processMsg(incomingCdeQueue.poll());
+        }
+
+        while (!outgoingCdeQueue.isEmpty()) {
+            cde.sendCDE(outgoingCdeQueue.poll());
+        }
+
+        LOGGER.info(
+            "{} successfully established SHIP connection",
+            nodeContext.getLogPrefix()
+        );
     }
 
     public void sendCdeMsg(byte[] msg) {
@@ -380,10 +371,10 @@ public class ShipConnectionImpl implements ShipConnection {
                 getLogPrefix()
             );
             // cde is not enabled yet, so queue the message
-            cdeMessageQueue.add(cdeMsg);
+            outgoingCdeQueue.add(cdeMsg);
         }
         else {
-            if (cdeMessageQueue.isEmpty()) {
+            if (outgoingCdeQueue.isEmpty()) {
                 cde.sendCDE(cdeMsg);
             }
             else {
@@ -391,14 +382,9 @@ public class ShipConnectionImpl implements ShipConnection {
                     "{}: Connection Data Exchange message will be queued",
                     getLogPrefix()
                 );
-                cdeMessageQueue.add(cdeMsg);
+                outgoingCdeQueue.add(cdeMsg);
             }
         }
-    }
-
-    @Override
-    public void setUserInterface(UserInterface userInterface) {
-        this.userInterface = userInterface;
     }
 
     @Override
@@ -407,8 +393,22 @@ public class ShipConnectionImpl implements ShipConnection {
     }
 
     @Override
-    public String getRemoteAddress() {
-        return connection.getRemoteAddress();
+    public String getRemoteId() {
+        return Optional
+            .ofNullable(ami)
+            .map(AccessMethodsIdentification::getAmMsg)
+            .map(AccessMethodsMsg::getId)
+            .orElse(null);
+    }
+
+    @Override
+    public InetSocketAddress getRemoteAddress() {
+        return webSocketHandler.getRemoteSocketAddress();
+    }
+
+    @Override
+    public URI getRemoteUri() {
+        return URI.create(ami.getAmMsg().getDns().getUri());
     }
 
     @Override
@@ -421,12 +421,16 @@ public class ShipConnectionImpl implements ShipConnection {
         if (LOGGER.isDebugEnabled()) {
             // avoid msg->string conversion if debug is not enabled
             LOGGER.debug(
-                "{} sending message:\n\t{}",
+                "{} sending message:\n{}",
                 getLogPrefix(),
                 MessageUtility.parseShipMsgToString(message)
             );
         }
-        connection.sendMsg(message);
+        webSocketHandler.sendMsg(message);
+    }
+
+    public CompletableFuture<ShipConnectionInterface> getConnectionFuture() {
+        return connectionFuture;
     }
 
     public void prepareCDEShutdown() {
@@ -439,20 +443,30 @@ public class ShipConnectionImpl implements ShipConnection {
             );
             CloseMsg closeMsg = new CloseMsg(CONFIRM);
             sendRawMessage(ShipMessageFactory.parseConnectionCloseBody(closeMsg));
-            ConnectionHandler connHandler = nodeContext.getConnHandler();
+            org.openmuc.jeebus.ship.api.ConnectionHandler connHandler = nodeContext.getConnHandler();
             if (connHandler != null) {
                 connHandler.onDisconnect(
                     DisconnectReason.REGULAR_END,
                     this
                 );
             }
-            connection.close();
+            webSocketHandler.close();
+            if (!connectionFuture.isDone()) {
+                connectionFuture.completeExceptionally(new CancellationException(
+                    "Connection was closed."
+                ));
+            }
         }
     }
 
     @Override
     public void closeImmediately() {
-        connection.close();
+        webSocketHandler.close();
+        if (!connectionFuture.isDone()) {
+            connectionFuture.completeExceptionally(new CancellationException(
+                "Connection was closed."
+            ));
+        }
     }
 
     @Override

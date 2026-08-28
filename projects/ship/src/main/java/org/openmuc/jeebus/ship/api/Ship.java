@@ -20,28 +20,26 @@ import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
 import org.openmuc.jeebus.ship.node.websocket.server.ShipServer;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
-import org.openmuc.jeebus.ship.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.jmdns.ServiceInfo;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.function.Predicate;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.safelyParseSocketAddress;
 
 public class Ship implements ShipInterface, AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Ship.class);
-    private final NamedThreadFactory namedThreadFactory = new NamedThreadFactory(
-        "jEEBus.SHIP State pool thread ");
     private ShipNodeImpl node;
 
     /**
@@ -54,98 +52,117 @@ public class Ship implements ShipInterface, AutoCloseable {
      */
     public Ship(ShipConfig nodeConfig, ConnectionHandler connHandler) {
         node = new ShipNodeImpl(nodeConfig, connHandler);
-        node.setClientConnectedListener(this::runConnectionDataPreparation);
+    }
+
+    @Override
+    public ShipConnectionInterface openConnection(String ipAddr) {
+        try {
+            return openConnection(
+                safelyParseSocketAddress(ipAddr),
+                "ship"
+            ).get();
+        }
+        catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<ShipConnectionInterface> openConnection(
+        InetSocketAddress socket,
+        String path
+    ) {
+        return openConnection(
+            socket,
+            path,
+            null,
+            null
+        );
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return an object representing the connection to the device/server if the
-     * connection was successful, else {@code null}
      * @implNote If a connection with the given SHIP node already exists, that
-     * {@link ShipConnectionInterface} is returned instead of opening a new
-     * connection. The reason for this behavior is that we want to avoid double
-     * connections, as they are always messy and unreliable to handle.
+     * {@link ShipConnectionInterface} is returned immediately in a completed
+     * Future. The reason for this behavior is that we want to avoid
+     * double connections, as they are always messy and unreliable to handle.
      */
     @Override
-    public ShipConnectionInterface openConnection(
+    public CompletableFuture<ShipConnectionInterface> openConnection(
         InetSocketAddress socket,
-        String path
+        String path,
+        String expectedShipId,
+        String expectedSki
     ) {
         assertNodeAvailable();
 
-        Optional<ShipConnectionImpl> existingConnection
-            = getExistingConnection(socket);
-
-        if (existingConnection.isPresent()) {
-            ShipConnectionInterface connApi = existingConnection
-                .get()
-                .getApiShipConn();
-            log.info(
-                "Reusing existing connection to {}",
-                beautify(socket)
-            );
-            return connApi;
+        if (expectedSki != null && !trusts(expectedSki)) {
+             log.debug("Opening a connection to a device that is not trusted yet.");
         }
 
-        ShipClient client = node.createClient(socket, path);
-        ShipClientHandler clientHandler = client.getHandler();
-        try {
-            if (!clientHandler.isShipConnRdy(5)) {
-                throw new IllegalStateException(
-                    "ShipConnection not ready in time");
-            }
-        }
-        catch (InterruptedException e) {
-            log.error(e.getMessage());
-            Thread.currentThread().interrupt();
-        }
-        ShipConnectionImpl connection = clientHandler.getConnection();
-        runConnectionDataPreparation(connection);
-
-        return connection.getApiShipConn();
+        return getExistingConnection(socket, expectedShipId)
+            .map(connection -> {
+                log.info(
+                    "Reusing existing connection to {} ({})",
+                    expectedShipId,
+                    beautify(socket)
+                );
+                return CompletableFuture.completedFuture(connection.getApiShipConnection());
+            })
+            .orElseGet(() -> CompletableFuture.supplyAsync(() -> node.createClient(
+                    socket,
+                    path,
+                    expectedShipId,
+                    expectedSki
+                ))
+                .thenCompose(ShipClient::start)
+                .thenApply(ShipClientHandler::getConnection)
+                .thenCompose(ShipConnection::start));
     }
 
     private Optional<ShipConnectionImpl> getExistingConnection(
-        InetSocketAddress socket
+        InetSocketAddress socket,
+        String shipId
     ) {
         assertNodeAvailable();
         return node
             .getAllWebSocketHandlers()
             .stream()
-            .filter(handler -> Objects.equals(
-                socket,
-                handler.getRemoteSocketAddress()
-            ))
+            .filter(Objects::nonNull)
+            .filter(handler ->
+                Objects.equals(
+                    Optional
+                        .ofNullable(handler.getShipConnection())
+                        .map(ShipConnectionImpl::getRemoteId)
+                        // invalid SKI so we never compare null to null
+                        .orElse("invalid"),
+                    shipId
+                ) || Objects.equals(handler.getRemoteSocketAddress(), socket)
+            )
             .map(WebSocketHandler::getShipConnection)
-            .findAny();
-    }
-
-    /**
-     * run the states in connection data preparation, this method is non-blocking and
-     * the states will run asynchronously
-     *
-     * @param connection
-     *     the connection that should run the connection data preparation states
-     */
-    public void runConnectionDataPreparation(ShipConnection connection) {
-        if (connection == null) {
-            throw new IllegalArgumentException("connection object should not be null");
-        }
-        ExecutorService exec = Executors.newSingleThreadExecutor(namedThreadFactory);
-        exec.execute(connection::initState);
-        exec.shutdown();
+            .filter(Objects::nonNull)
+            .filter(Predicate.not(ShipConnectionImpl::isConnectionCloseState))
+            .findFirst();
     }
 
     public String getOwnSki() {
         assertNodeAvailable();
-        return node.getKeyManagement().getOwnSkiAsStr();
+        return node.getKeyManagement().getOwnSki();
+    }
+
+    public Set<InetSocketAddress> getServerSockets() {
+        return this.node
+            .getServer()
+            .map(ShipServer::getBoundSocketAddresses)
+            .orElse(null);
     }
 
     /**
      * @param remoteSki
      *     the Subject Key Identifier (SKI) of the remote SHIP note in question
-     * @return true if the trust level for the given SKI is &ge; {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
+     * @return true if the trust level for the given SKI is &ge;
+     * {@link ShipNodeParameters#MINIMAL_TRUST_LEVEL}.
      */
     public boolean trusts(String remoteSki) {
         return node.getKeyManagement().trusts(remoteSki);
@@ -159,29 +176,26 @@ public class Ship implements ShipInterface, AutoCloseable {
      * @param ski
      *     the ski to add to the trusted SKIs
      */
-    public synchronized void addTrustedSki(String ski) {
+    public void addTrustedSki(String ski) {
         assertNodeAvailable();
         if (KeyManagement.isValidSki(ski)) {
             node.getKeyManagement().addTrustedSki(ski, USER_VERIFIED_TRUST_LEVEL);
-            synchronized (node.getServer()) {
-                node.getServer()
-                    .stream()
-                    .map(ShipServer::getHandlers)
-                    .flatMap(Collection::stream)
-                    .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
-                    .map(WebSocketHandler::getShipConnection)
-                    .filter(Objects::nonNull)
-                    .forEach(ShipConnectionImpl::trustCommPartner);
-            }
-            synchronized (node.getClients()) {
-                node.getClients()
-                    .stream()
-                    .map(ShipClient::getHandler)
-                    .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
-                    .map(ShipClientHandler::getConnection)
-                    .filter(Objects::nonNull)
-                    .forEach(ShipConnectionImpl::trustCommPartner);
-            }
+            node.getServer().ifPresent(server -> {
+                synchronized (server) {
+                    server.getHandlers()
+                        .stream()
+                        .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
+                        .map(WebSocketHandler::getShipConnection)
+                        .filter(Objects::nonNull)
+                        .forEach(ShipConnectionImpl::trustCommPartner);
+                }
+            });
+            new ArrayList<>(node.getClients()).stream()
+                .map(ShipClient::getHandler)
+                .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
+                .map(ShipClientHandler::getConnection)
+                .filter(Objects::nonNull)
+                .forEach(ShipConnectionImpl::trustCommPartner);
         }
     }
 
@@ -228,7 +242,7 @@ public class Ship implements ShipInterface, AutoCloseable {
      * clients have a time window of 1 to 120 seconds for the connection The default
      * value for the window is 60 seconds. If the time window passed without any
      * client connecting, the auto-accept-mode will be turned off.
-     * <p>
+     *
      * @deprecated since 2.3.0. Usage of the auto accept mode is discouraged by the
      * EEBus Initiative and most stack implementers. Experience has shown even one
      * device in auto accept mode makes setting up working EEBus networks hard and
@@ -247,16 +261,6 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     /**
-     * @param listener
-     *     will be called when a new remote SHIP client connects to the server of
-     *     this node.
-     */
-    public void setClientConnectedListener(ClientConnectedListener listener) {
-        assertNodeAvailable();
-        node.setClientConnectedListener(listener);
-    }
-
-    /**
      * returns a set with all detected services, including own service
      *
      * @return the set with all detected services
@@ -269,7 +273,8 @@ public class Ship implements ShipInterface, AutoCloseable {
     }
 
     /**
-     * @return a Set containing all resolved ShipServices except this node's servcices
+     * @return a Set containing all resolved ShipServices except this node's
+     * servcices
      */
     public Set<ShipService> getCurrentServices() {
         assertNodeAvailable();
@@ -304,5 +309,9 @@ public class Ship implements ShipInterface, AutoCloseable {
         if (node == null) {
             throw new IllegalStateException("Ship already shut down!");
         }
+    }
+
+    ShipNodeImpl getNode() {
+        return node;
     }
 }

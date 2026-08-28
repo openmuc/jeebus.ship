@@ -12,7 +12,8 @@ package org.openmuc.jeebus.ship.shipconnection;
 
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
-import org.openmuc.jeebus.ship.view.UserInterface;
+
+import java.util.concurrent.CompletableFuture;
 
 public interface ShipConnection extends ShipConnectionInterface {
     boolean isServer();
@@ -25,12 +26,12 @@ public interface ShipConnection extends ShipConnectionInterface {
 
     void enableConnectionDataExchange();
 
-    void setUserInterface(UserInterface userInterface);
+    void connectionEstablished();
 
     /**
      * Start up the SHIP state machine. Callable only once.
      */
-    void initState();
+    CompletableFuture<ShipConnectionInterface> start();
 
     ShipNodeContext getShipNodeContext();
 }

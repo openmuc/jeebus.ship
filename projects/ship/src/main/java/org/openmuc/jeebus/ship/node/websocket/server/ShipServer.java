@@ -28,9 +28,11 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.openmuc.jeebus.ship.node.ShipNodeParameters.WSS_HANDSHAKE_TIMEOUT;
 
 public class ShipServer {
     protected static final Logger log = LoggerFactory.getLogger(ShipServer.class);
@@ -71,9 +73,8 @@ public class ShipServer {
 
         this.serverChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
 
-        // TODO
         this.nodeContext.setLogPrefix(
-            "SHIP server (" + nodeContext.getOwnShipId() + ")"
+            "local SHIP server"
         );
         // the logPrefix will be changed in the serverHandler later so the initial
         // prefix needs to be saved for logging
@@ -195,29 +196,22 @@ public class ShipServer {
     }
 
     public synchronized void addHandler(ShipServerHandler handler) {
-        handlers.add(handler);
-        ExecutorService exec = Executors.newSingleThreadExecutor();
-        exec.execute(() -> {
-            if (shipNode.getClientConnectedListener() != null) {
-                try {
-                    if (!handler.isShipConnRdy(5)) {
-                        throw new IllegalStateException(
-                            "ShipConnection not ready in time");
-                    }
-                }
-                catch (InterruptedException e) {
-                    log.error(e.getMessage());
-                    Thread.currentThread().interrupt();
-                }
-                shipNode
-                    .getClientConnectedListener()
-                    .onClientConnected(handler.getShipConnection());
-            }
-            else {
-                log.warn("{}: ClientConnectedListener not set", logPrefix);
-            }
-        });
-        exec.shutdown();
+        Objects.requireNonNull(handler);
+
+        handler
+            .getWssHandshakeFuture()
+            .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS)
+            .thenRun(() -> handlers.add(handler))
+            .thenCompose(ignored -> handler.getConnection().start())
+            .exceptionally(throwable -> {
+                handler.close();
+                log.error(
+                    "{}: WSS handshake or connection start failed:",
+                    logPrefix,
+                    throwable
+                );
+                return null;
+            });
     }
 
     public synchronized void removeHandler(ShipServerHandler handler) {

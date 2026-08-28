@@ -16,9 +16,10 @@ public class ShipNodeContext {
 
     private final String ownShipId;
 
-    private final KeyManagement keyManagement;
+    private String expectedSki;
+    private String expectedId;
 
-    private ShipNodeParameters config;
+    private final KeyManagement keyManagement;
 
     private String logPrefix;
 
@@ -26,22 +27,29 @@ public class ShipNodeContext {
 
     public ShipNodeContext(
         KeyManagement keyManagement,
-        ShipNodeParameters config,
         String ownShipId
     ) {
-        this.keyManagement = keyManagement;
-        this.config = config;
-        this.ownShipId = ownShipId;
+        this(keyManagement, ownShipId, null, null);
     }
 
     public ShipNodeContext(
-        ShipNodeParameters config,
+        KeyManagement keyManagement,
+        String ownShipId,
+        String expectedId,
+        String expectedSki
+    ) {
+        this.keyManagement = keyManagement;
+        this.ownShipId = ownShipId;
+        this.expectedId = expectedId;
+        this.expectedSki = expectedSki;
+    }
+
+    public ShipNodeContext(
         String logPrefix,
         ConnectionHandler connHandler,
         String ownShipId,
         KeyManagement keyManagement
     ) {
-        this.config = config;
         this.logPrefix = logPrefix;
         this.connHandler = connHandler;
         this.ownShipId = ownShipId;
@@ -50,14 +58,6 @@ public class ShipNodeContext {
 
     public KeyManagement getKeyManagement() {
         return this.keyManagement;
-    }
-
-    public ShipNodeParameters getConfig() {
-        return config;
-    }
-
-    public void setConfig(ShipNodeParameters config) {
-        this.config = config;
     }
 
     public String getLogPrefix() {
@@ -78,5 +78,13 @@ public class ShipNodeContext {
 
     public String getOwnShipId() {
         return ownShipId;
+    }
+
+    public String getExpectedId() {
+        return expectedId;
+    }
+
+    public String getExpectedSki() {
+        return expectedSki;
     }
 }

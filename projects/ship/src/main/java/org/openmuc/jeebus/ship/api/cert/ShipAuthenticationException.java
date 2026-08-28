@@ -8,16 +8,16 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-package org.openmuc.jeebus.ship.node.websocket;
-
-import org.openmuc.jeebus.ship.shipconnection.BasicConnection;
+package org.openmuc.jeebus.ship.api.cert;
 
 /**
- * In addition to a {@link BasicConnection}, we also know who the communication
- * partner is.
+ * Unchecked Exception thrown when authentication of remote SHIP devices fails.
  */
-public interface AuthenticatedConnection extends BasicConnection {
-    String getRemoteAddress();
-
-    String getPeerSki();
+public class ShipAuthenticationException extends RuntimeException {
+    public ShipAuthenticationException(String message) {
+        super(message);
+    }
+    public ShipAuthenticationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

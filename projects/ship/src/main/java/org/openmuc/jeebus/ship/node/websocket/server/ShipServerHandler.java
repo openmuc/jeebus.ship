@@ -20,16 +20,14 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
-import org.openmuc.jeebus.ship.node.websocket.AuthenticatedConnection;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
-import java.net.InetSocketAddress;
-
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
+import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.SERVER;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
-public class ShipServerHandler extends WebSocketHandler implements
-    AuthenticatedConnection {
+public class ShipServerHandler extends WebSocketHandler {
 
     private final ShipServer server;
 
@@ -41,23 +39,18 @@ public class ShipServerHandler extends WebSocketHandler implements
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
+        String remoteSocket = beautify(ctx.channel().remoteAddress());
 
-        InetSocketAddress remoteAddr = (InetSocketAddress) ctx
-            .channel()
-            .remoteAddress();
-        int remotePort = remoteAddr.getPort();
         log.info(
-            "{} accepted a connection with client (port {})",
+            "{} accepted a connection with remote client ({})",
             nodeContext.getLogPrefix(),
-            remotePort
+            remoteSocket
         );
 
         // replace the logPrefix in the nodeContext with the specific one, while keeping other variables the same
-        String specificLogPrefix = nodeContext
-            .getLogPrefix()
-            .replace(")", ", client port " + remotePort + ")");
+        String specificLogPrefix = nodeContext.getLogPrefix()
+            +" to "+remoteSocket;
         nodeContext = new ShipNodeContext(
-            nodeContext.getConfig(),
             specificLogPrefix,
             nodeContext.getConnHandler(),
             nodeContext.getOwnShipId(),
@@ -95,7 +88,8 @@ public class ShipServerHandler extends WebSocketHandler implements
 
                 if (bytes == null) {
                     log.warn(
-                        "Received empty Message from {}. Closing SHIP connection.",
+                        "{} received empty/invalid Message or CloseWebSocketFrame"
+                            + ". Closing connection.",
                         nodeContext.getLogPrefix()
                     );
                     if (nodeContext.getConnHandler() != null) {
@@ -103,7 +97,7 @@ public class ShipServerHandler extends WebSocketHandler implements
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                connection.getApiShipConn()
+                                getConnection().getApiShipConnection()
                             );
                     }
                     close();
@@ -115,8 +109,8 @@ public class ShipServerHandler extends WebSocketHandler implements
                         bytes = messageBuffer.toByteArray();
                         messageBuffer.reset();
 
-                        if (connection != null) {
-                            connection.onMessage(bytes);
+                        if (getConnection() != null) {
+                            getConnection().onMessage(bytes);
                         }
                         else {
                             log.warn(
@@ -150,8 +144,11 @@ public class ShipServerHandler extends WebSocketHandler implements
 
         // Handshake
         WebSocketServerHandshakerFactory wsFactory
-            = new WebSocketServerHandshakerFactory(getWebSocketLocation(req),
-            "ship", true, 5 * 1024 * 1024
+            = new WebSocketServerHandshakerFactory(
+                getWebSocketLocation(req),
+                "ship",
+                true,
+                5 * 1024 * 1024
         );
         WebSocketServerHandshaker handshaker = wsFactory.newHandshaker(req);
         if (handshaker == null) {
@@ -160,13 +157,17 @@ public class ShipServerHandler extends WebSocketHandler implements
         else {
             handshaker.handshake(ctx.channel(), req).awaitUninterruptibly();
 
-            if (node.isDoubleConnection(getPeerSki())) {
-                doubleConnProcedure(this.getPeerSki());
+            if (!areWeClosingDoubleConnection(this.getPeerSki())) {
+                connection = new ShipConnectionImpl(
+                    SERVER,
+                    getTrustLevel(),
+                    nodeContext,
+                    this
+                );
+
+                wssHandshakeFuture.complete(getConnection());
             }
-            connection = new ShipConnectionImpl(true, getTrustLevel(), nodeContext,
-                this
-            );
-            shipConnRdyLatch.countDown();
+
         }
     }
 
@@ -199,24 +200,24 @@ public class ShipServerHandler extends WebSocketHandler implements
             + server.getWssPath();
     }
 
-    public void setConnection(ShipConnectionImpl connection) {
-        this.connection = connection;
-    }
-
     public Channel getChannel() {
         return this.channel;
     }
 
     @Override
     public void close() {
-        if (connection != null) {
-            connection.stopStateTimeouts();
+        node.removeCurrentRemoteSki(getPeerSki());
+        if (!wssHandshakeFuture.isDone()) {
+            wssHandshakeFuture.complete(null);
         }
-        channel.close().awaitUninterruptibly();
+        if (getConnection() != null) {
+            if (!getConnection().getConnectionFuture().isDone()) {
+                getConnection().getConnectionFuture().complete(null);
+            }
+            getConnection().stopStateTimeouts();
+        }
         server.removeHandler(this);
+        channel.close().awaitUninterruptibly();
     }
 
-    public ShipConnectionImpl getConnection() {
-        return connection;
-    }
 }
