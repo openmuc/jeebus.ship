@@ -126,10 +126,13 @@ public class ShipClient {
 
         return toCompletableFuture(bootstrap.connect(socket))
             .orTimeout(BOOTSTRAP_TIMEOUT, SECONDS)
-            .thenApply(ignored -> toCompletableFuture(handler.handshakeFuture()))
+            .thenCompose(ignored -> toCompletableFuture(handler.handshakeFuture()))
             .thenApply(alsoIgnored -> handler)
-            .thenCombine(handler.getWssHandshakeFuture(), (ignored, alsoIgnored) -> handler)
-            .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS);
+            .thenCombine(
+                handler.getWssHandshakeFuture()
+                    .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS),
+                (handler, ignored) -> handler
+            );
     }
 
     public synchronized void stop() {

@@ -153,9 +153,6 @@ public class ShipClientHandler extends WebSocketHandler {
     @Override
     public void close() {
         node.removeCurrentRemoteSki(getPeerSki());
-        if (!handshakeFuture.isDone()) {
-            handshakeFuture.cancel(true);
-        }
         cancelFutures(new CancellationException("Connection closed before it could be established"));
         if (super.getConnection() != null) {
             super.getConnection().stopStateTimeouts();
@@ -165,5 +162,13 @@ public class ShipClientHandler extends WebSocketHandler {
         }
         channel.close().awaitUninterruptibly();
         stopListener.stop();
+    }
+
+    @Override
+    protected void cancelFutures(Throwable exception) {
+        if (!handshakeFuture.isDone()) {
+            handshakeFuture.setFailure(exception);
+        }
+        super.cancelFutures(exception);
     }
 }

@@ -8,21 +8,15 @@
  * SPDX-License-Identifier: EPL-2.0
  ********************************************************************************/
 
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.parallel.Execution;
-import org.junit.jupiter.api.parallel.ExecutionMode;
-import org.openmuc.jeebus.ship.api.*;
-import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
+package org.openmuc.jeebus.ship.api; import org.junit.jupiter.api.*;
 import org.openmuc.jeebus.ship.node.ShipConfig;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
-import java.util.function.Predicate;
 
 import static java.lang.invoke.MethodHandles.lookup;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -197,7 +191,10 @@ public class SystemTest {
         ).join();
 
         assertThat(winner.get(), is(notNullValue()));
+        System.out.println("winner is client to "+winner.get().getRemoteId());
+
         assertThat(doubleConnCause.get(), is(notNullValue()));
+        doubleConnCause.get().printStackTrace();
         assertThat(doubleConnCause.get(),
             hasProperty(
                 "message",
@@ -213,6 +210,12 @@ public class SystemTest {
             receivedCdeMessage.get(),
             is(EXAMPLE_MESSAGE)
         );
+
+        rightShip.close();
+
+        await()
+            .atMost(5, SECONDS)
+            .until(leftShip.getNode().getAllWebSocketHandlers()::isEmpty);
     }
 
     @Test

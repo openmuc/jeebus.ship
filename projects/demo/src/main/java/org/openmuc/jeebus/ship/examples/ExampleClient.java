@@ -15,7 +15,6 @@ import org.openmuc.jeebus.ship.node.ShipConfig;
 import org.openmuc.jeebus.ship.util.ShipUtilities;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;

@@ -149,56 +149,6 @@ public class ShipNodeImpl {
         ).collect(Collectors.toSet());
     }
 
-    public void closeDoubleConns(WebSocketHandler current) {
-        List<ShipServerHandler> serverHandlerToClose = new ArrayList<>();
-        // Create a copy of the server handlers list to avoid holding the synchronized list lock during iteration
-        List<ShipServerHandler> handlersCopy = new ArrayList<>(server
-            .map(ShipServer::getHandlers)
-            .orElse(Collections.emptyList()));
-        for (ShipServerHandler serverHandler : handlersCopy) {
-            if (serverHandler.getPeerSki().equals(current.getPeerSki())
-                && !serverHandler.equals(current)) {
-                ShipConnectionImpl shipConn = serverHandler.getShipConnection();
-                if (shipConn != null) {
-                    shipConn.stopStateTimeouts();
-                    if (shipConn.getCde() != null) {
-                        shipConn.initiateConnectionClose(
-                            100,
-                            ConnectionCloseReasonType.UNSPECIFIC
-                        );
-                    }
-                }
-                if (shipConn == null
-                    || !shipConn.isConnectionCloseState()) {
-                    log.info("close double conn initiated");
-                    serverHandlerToClose.add(serverHandler);
-                }
-            }
-        }
-        // close after loop to avoid ConcurrentModificationException
-        serverHandlerToClose.forEach(ShipServerHandler::close);
-
-        // Create a copy of the clients list to avoid holding the synchronized list lock during iteration
-        List<ShipClient> clientsCopy = new ArrayList<>(clients);
-        for (ShipClient client : clientsCopy) {
-            ShipClientHandler clientHandler = client.getHandler();
-            if (clientHandler.getPeerSki().equals(current.getPeerSki())
-                && !clientHandler.equals(current)) {
-                ShipConnectionImpl shipConn = clientHandler.getConnection();
-                if (shipConn.getCde() != null) {
-                    shipConn.initiateConnectionClose(
-                        100,
-                        ConnectionCloseReasonType.UNSPECIFIC
-                    );
-                }
-                else {
-                    log.info("close double conn initiated for client");
-                    clientHandler.close();
-                }
-            }
-        }
-    }
-
     public ShipClient createClient(
         InetSocketAddress address,
         String path,
