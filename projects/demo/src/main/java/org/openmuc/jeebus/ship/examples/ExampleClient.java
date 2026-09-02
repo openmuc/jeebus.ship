@@ -75,7 +75,7 @@ public class ExampleClient {
 
         ship = new Ship(conf, connHandler);
 
-        // replace String parameter with server IP as needed
+        // replace parameters with server address as needed
         CompletableFuture<ShipConnectionInterface> shipConnectionFuture = ship.openConnection(
             ShipUtilities.safelyParseSocketAddress("localhost:2001"),
             "ship",

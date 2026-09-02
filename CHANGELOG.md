@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0] -
+## [3.0.0] - 2026-09-02
 
 ### Changed
 
@@ -20,7 +20,7 @@
 - Drastically improve logging
 - Check for double connections at the TLS handshake and immediately cancel
   them if own SKI is greater
-    - else, send out a WebSocket ping according to SHIP specification
+  - else, send out a WebSocket ping according to SHIP specification
 
 ### Added
 

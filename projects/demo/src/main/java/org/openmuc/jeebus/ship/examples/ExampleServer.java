@@ -31,12 +31,10 @@ public class ExampleServer {
 
             @Override
             public void onDisconnect(
-                DisconnectReason reason, ShipConnectionInterface shipConn
+                DisconnectReason reason,
+                ShipConnectionInterface shipConn
             ) {
-                /*
-                 this method can be used like this to keep track of server
-                 connections.
-                */
+                // this method can be used to keep track of server connections.
             }
 
             @Override
@@ -63,10 +61,6 @@ public class ExampleServer {
             }
         };
 
-        /*
-         keepAlive may be set as desired, but will only minimally influence
-         behaviour as of now.
-        */
         ShipConfig conf = ShipConfig.getBuilder()
             .withServerBindAddresses("localhost:2001")
             .withId("JEEBUS-EXAMPLE-SERVER-1")
