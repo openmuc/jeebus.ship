@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.1] - 
+
+### Fixed
+
+- Properly close and clean up connections with inactive websocket channels
+
 ## [3.0.0] - 2026-09-02
 
 ### Changed

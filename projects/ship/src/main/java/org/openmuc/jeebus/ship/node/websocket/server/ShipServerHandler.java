@@ -63,14 +63,6 @@ public class ShipServerHandler extends WebSocketHandler {
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        super.channelInactive(ctx);
-
-        server.removeHandler(this);
-        log.info("{}: connection was closed", nodeContext.getLogPrefix());
-    }
-
-    @Override
     public synchronized void channelRead0(
         ChannelHandlerContext ctx,
         Object msg
@@ -214,6 +206,7 @@ public class ShipServerHandler extends WebSocketHandler {
             if (!getConnection().getConnectionFuture().isDone()) {
                 getConnection().getConnectionFuture().complete(null);
             }
+            notifyConnectionHandlerOnClose();
             getConnection().stopStateTimeouts();
         }
         server.removeHandler(this);

@@ -42,6 +42,7 @@ import java.util.concurrent.*;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALID_MESSAGE_TYPE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
 import static org.openmuc.jeebus.ship.message.MessageUtility.wrapInBinaryFrame;
 
 public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> {
@@ -282,6 +283,24 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     }
 
     public abstract void close();
+
+    protected void notifyConnectionHandlerOnClose() {
+        if (getConnection().getConnectionFuture().isDone()
+            && !getConnection().getConnectionFuture().isCompletedExceptionally()
+        ) {
+            nodeContext.getConnHandler().onDisconnect(
+                ERROR,
+                getShipConnection().getApiShipConnection()
+            );
+        }
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        super.channelInactive(ctx);
+        close();
+        log.info("{}: connection was closed", nodeContext.getLogPrefix());
+    }
 
     @Override
     public void exceptionCaught(

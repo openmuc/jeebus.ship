@@ -19,7 +19,6 @@ import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketHandshakeException;
-import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
@@ -27,6 +26,7 @@ import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
 import java.util.concurrent.CancellationException;
 
+import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
@@ -65,12 +65,6 @@ public class ShipClientHandler extends WebSocketHandler {
         nodeContext.setLogPrefix("SHIP client");
 
         this.channel = ctx.channel();
-    }
-
-    @Override
-    public void channelInactive(ChannelHandlerContext ctx) {
-        log.info("{}: connection was closed", nodeContext.getLogPrefix());
-        close();
     }
 
     @Override
@@ -129,7 +123,7 @@ public class ShipClientHandler extends WebSocketHandler {
                         nodeContext
                             .getConnHandler()
                             .onDisconnect(
-                                DisconnectReason.ERROR,
+                                ERROR,
                                 super.getConnection().getApiShipConnection()
                             );
                     }
@@ -153,9 +147,11 @@ public class ShipClientHandler extends WebSocketHandler {
     @Override
     public void close() {
         node.removeCurrentRemoteSki(getPeerSki());
-        cancelFutures(new CancellationException("Connection closed before it could be established"));
-        if (super.getConnection() != null) {
-            super.getConnection().stopStateTimeouts();
+        cancelFutures(new CancellationException(
+            "Connection closed before it could be established"));
+        if (getConnection() != null) {
+            getConnection().stopStateTimeouts();
+            notifyConnectionHandlerOnClose();
         }
         if (channel.isActive()) {
             channel.writeAndFlush(new CloseWebSocketFrame());
