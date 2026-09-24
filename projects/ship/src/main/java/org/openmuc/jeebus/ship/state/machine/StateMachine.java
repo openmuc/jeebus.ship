@@ -219,6 +219,7 @@ public class StateMachine implements StateHandlerContext {
     @Override
     public void closeConnection() {
         shipConnection.closeImmediately();
+        timeoutExecutor.shutdown();
     }
 
     public int getDefaultTimeoutSeconds(SpecifiedTimeout which) {
