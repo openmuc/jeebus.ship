@@ -272,6 +272,10 @@ public class ShipNodeImpl {
             .forEach(ShipClient::stop);
     }
 
+    public void stopNetworkInterfaceScanner() {
+        this.networkInterfaceScanner.close();
+    }
+
     public ServiceRegistry getServiceRegistry() {
         return serviceRegistry;
     }

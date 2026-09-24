@@ -321,6 +321,7 @@ public class Ship implements ShipInterface, AutoCloseable {
             log.warn("shutDown() was called after already being shut down");
             return;
         }
+        node.stopNetworkInterfaceScanner();
         node.getServiceRegistry().close();
         node.stopAllClients();
         node.stopServer();

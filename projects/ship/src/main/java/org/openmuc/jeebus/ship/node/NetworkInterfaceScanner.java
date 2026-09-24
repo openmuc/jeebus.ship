@@ -167,7 +167,7 @@ public class NetworkInterfaceScanner implements AutoCloseable {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         executor.shutdown();
     }
 }
