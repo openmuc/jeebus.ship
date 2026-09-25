@@ -74,6 +74,10 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         this.wssHandshakeFuture = new CompletableFuture<>();
     }
 
+    public boolean isChannelInitialized() {
+        return this.channel != null;
+    }
+
     public void sendMsg(byte[] msg) {
         if (channel.isActive()) {
             channel.writeAndFlush(wrapInBinaryFrame(msg));
