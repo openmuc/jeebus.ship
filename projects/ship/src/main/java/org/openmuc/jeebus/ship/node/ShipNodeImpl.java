@@ -15,6 +15,7 @@ import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.ShipConfig;
 import org.openmuc.jeebus.ship.api.ShipConnectionInfoSnapshot;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
+import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
@@ -346,14 +347,26 @@ public class ShipNodeImpl {
                 this.clients.stream()
                         .map(ShipClient::getHandler)
                         .map(h -> this.createConnectionInfoSnapshot(h, CLIENT_CONNECTION_TO_PEER))
-        ).collect(Collectors.toList());
+        ).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     private ShipConnectionInfoSnapshot createConnectionInfoSnapshot(WebSocketHandler handler, ShipConnectionInfoSnapshot.ConnectionTypeEnum connectionType) {
+        if (!handler.isChannelInitialized()) {
+            return null;
+        }
+
         boolean isFullyEstablished = handler.getShipConnection() != null && handler.getShipConnection().getCde() != null;
+        String ski;
+        try {
+            ski = handler.getPeerSki();
+        } catch (ShipAuthenticationException e) {
+            // This exception here means that the SKI is not available yet - most likely the tls handshake is not finished yet.
+            return null;
+        }
+
         return new ShipConnectionInfoSnapshot(
                 connectionType,
-                handler.getPeerSki(),
+                ski,
                 handler.getRemoteSocketAddress(),
                 handler.getTrustLevel(),
                 isFullyEstablished,

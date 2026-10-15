@@ -295,6 +295,8 @@ public class Ship implements ShipInterface, AutoCloseable {
 
     /**
      * @return a snapshot of the current SHIP connections.
+     * Returns all open connections, even connections where the handshake is not done.
+     * Make sure to check DataExchangeEstablished if you only want to have established connections.
      */
     public List<ShipConnectionInfoSnapshot> getConnectionInfos() {
         if (node == null) {
