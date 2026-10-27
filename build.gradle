@@ -32,7 +32,9 @@ jar.enabled = false
 
 def internalFolder = new File("$projectDir/gradle/develop/")
 
-if (internalFolder.exists()) {
+def isNestedBuild = gradle.parent != null
+
+if (internalFolder.exists() && !isNestedBuild) {
     internalFolder.eachFile { file ->
         if (file.name.endsWith('.gradle')) {
             apply from: file.path
