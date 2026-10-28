@@ -38,9 +38,7 @@ To run all contained unit tests, run
 ```
 
 There are three subprojects in the `projects` folder. `ship` contains the
-general implementation of SHIP, while `ship-cli` provides a simple Command Line
-Interface (CLI) for debugging SHIP connections. However, the `ship-cli` submodule is
-deprecated and will be discontinued in the next major release. `demo` contains
+general implementation of SHIP, while `demo` contains
 minimal example applications showing how jEEBus.SHIP can be configured and used.
 
 ## Contributing
