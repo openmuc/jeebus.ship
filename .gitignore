@@ -30,3 +30,7 @@ bin/
 # KDE folder settings
 .directory
 /logs/
+
+# IntelliJ
+out/
+
