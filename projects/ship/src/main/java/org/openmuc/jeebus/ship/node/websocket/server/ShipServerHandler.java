@@ -209,7 +209,9 @@ public class ShipServerHandler extends WebSocketHandler {
 
     @Override
     public void close() {
-        node.removeCurrentRemoteSki(getPeerSki());
+        if (this.peerSki != null) {
+            node.removeCurrentRemoteSki(getPeerSki());
+        }
         if (!wssHandshakeFuture.isDone()) {
             wssHandshakeFuture.complete(null);
         }

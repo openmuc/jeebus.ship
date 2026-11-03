@@ -55,7 +55,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     protected ShipConnectionImpl connection;
 
     // cache these values so we don't have to recompute them all the time
-    private volatile transient String peerSki = null;
+    protected volatile transient String peerSki = null;
 
     protected Channel channel;
 
