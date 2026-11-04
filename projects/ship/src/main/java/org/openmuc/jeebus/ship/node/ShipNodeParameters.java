@@ -51,8 +51,10 @@ public class ShipNodeParameters {
     public static final int CMI_TIMEOUT = 30;
     public static final int AMI_TIMEOUT = 60;
 
-    // TODO: find out where this value is specified
-    public static final int WSS_HANDSHAKE_TIMEOUT = 5;
+    /**
+     * This is not defined in the spec. Usual recommendations are 5 to 10 seconds.
+     */
+    public static final int WSS_HANDSHAKE_TIMEOUT = 10;
 
     /**
      * T_hello_init=60-240, should be constant across connections
