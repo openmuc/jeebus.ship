@@ -55,7 +55,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     protected ShipConnectionImpl connection;
 
     // cache these values so we don't have to recompute them all the time
-    protected volatile transient String peerSki = null;
+    private volatile transient String peerSki = null;
 
     protected Channel channel;
 
@@ -239,7 +239,8 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                  * they arise seems to be the most reliable way of handling them.
                  */
                 cancelFutures(new CancellationException(
-                    "This is a double connection we are cancelling."));
+                    "This is a double connection we are cancelling."
+                ));
 
                 if (connection != null) {
                     if (nodeContext.getConnHandler() != null) {
@@ -282,19 +283,21 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         }
     }
 
-    public ShipConnectionImpl getShipConnection() {
-        return this.connection;
-    }
-
     public Instant getConnectionStartDate() {
         return this.connectionStartDate;
     }
 
-    public abstract void close();
+    public void close() {
+        if (this.peerSki != null) {
+            node.removeCurrentRemoteSki(getPeerSki());
+        }
+        cancelFutures(new CancellationException(
+            "Connection closed before it could be established"));
+    }
 
     protected void notifyConnectionHandlerOnClose() {
-        if (getConnection().getConnectionFuture().isDone()
-            && !getConnection().getConnectionFuture().isCompletedExceptionally()
+        if (getShipConnection().getConnectionFuture().isDone()
+            && !getShipConnection().getConnectionFuture().isCompletedExceptionally()
         ) {
             nodeContext.getConnHandler().onDisconnect(
                 ERROR,
@@ -305,9 +308,9 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        log.info("{}: channel is inactive", nodeContext.getLogPrefix());
         super.channelInactive(ctx);
         close();
-        log.info("{}: connection was closed", nodeContext.getLogPrefix());
     }
 
     @Override
@@ -334,7 +337,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return wssHandshakeFuture;
     }
 
-    public ShipConnectionImpl getConnection() {
+    public ShipConnectionImpl getShipConnection() {
         return connection;
     }
 }

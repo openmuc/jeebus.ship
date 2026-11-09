@@ -139,7 +139,7 @@ public class ShipClient {
             log.info("stopping {}", nodeContext.getLogPrefix());
         }
 
-        ShipConnectionImpl connection = handler.getConnection();
+        ShipConnectionImpl connection = handler.getShipConnection();
 
         if (connection != null) {
             connection.stopStateTimeouts();

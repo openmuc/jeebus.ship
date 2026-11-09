@@ -59,7 +59,7 @@ public class ShipServerHandler extends WebSocketHandler {
 
         this.channel = ctx.channel();
 
-        server.addHandler(this);
+        server.addHandlerWhenReady(this);
     }
 
     @Override
@@ -89,7 +89,7 @@ public class ShipServerHandler extends WebSocketHandler {
                             .getConnHandler()
                             .onDisconnect(
                                 DisconnectReason.ERROR,
-                                getConnection().getApiShipConnection()
+                                getShipConnection().getApiShipConnection()
                             );
                     }
                     close();
@@ -101,8 +101,8 @@ public class ShipServerHandler extends WebSocketHandler {
                         bytes = messageBuffer.toByteArray();
                         messageBuffer.reset();
 
-                        if (getConnection() != null) {
-                            getConnection().onMessage(bytes);
+                        if (getShipConnection() != null) {
+                            getShipConnection().onMessage(bytes);
                         }
                         else {
                             log.warn(
@@ -168,7 +168,7 @@ public class ShipServerHandler extends WebSocketHandler {
                     this
                 );
 
-                wssHandshakeFuture.complete(getConnection());
+                wssHandshakeFuture.complete(getShipConnection());
             }
 
         }
@@ -209,18 +209,11 @@ public class ShipServerHandler extends WebSocketHandler {
 
     @Override
     public void close() {
-        if (this.peerSki != null) {
-            node.removeCurrentRemoteSki(getPeerSki());
-        }
-        if (!wssHandshakeFuture.isDone()) {
-            wssHandshakeFuture.complete(null);
-        }
-        if (getConnection() != null) {
-            if (!getConnection().getConnectionFuture().isDone()) {
-                getConnection().getConnectionFuture().complete(null);
-            }
+        super.close();
+
+        if (getShipConnection() != null) {
             notifyConnectionHandlerOnClose();
-            getConnection().stopStateTimeouts();
+            getShipConnection().stopStateTimeouts();
         }
         server.removeHandler(this);
         channel.close().awaitUninterruptibly();

@@ -129,7 +129,7 @@ public class Ship implements ShipInterface, AutoCloseable {
                     expectedSki
                 ))
                 .thenCompose(ShipClient::start)
-                .thenApply(ShipClientHandler::getConnection)
+                .thenApply(ShipClientHandler::getShipConnection)
                 .thenCompose(ShipConnection::start));
     }
 
@@ -205,7 +205,7 @@ public class Ship implements ShipInterface, AutoCloseable {
             new ArrayList<>(node.getClients()).stream()
                 .map(ShipClient::getHandler)
                 .filter(handler -> Objects.equals(handler.getPeerSki(), ski))
-                .map(ShipClientHandler::getConnection)
+                .map(ShipClientHandler::getShipConnection)
                 .filter(Objects::nonNull)
                 .forEach(ShipConnectionImpl::trustCommPartner);
         }

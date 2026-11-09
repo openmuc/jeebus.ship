@@ -24,8 +24,6 @@ import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
-import java.util.concurrent.CancellationException;
-
 import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
@@ -105,7 +103,7 @@ public class ShipClientHandler extends WebSocketHandler {
                         this
                     );
 
-                    getWssHandshakeFuture().complete(super.getConnection());
+                    getWssHandshakeFuture().complete(super.getShipConnection());
                 }
             }
             catch (WebSocketHandshakeException e) {
@@ -134,7 +132,7 @@ public class ShipClientHandler extends WebSocketHandler {
                             .getConnHandler()
                             .onDisconnect(
                                 ERROR,
-                                super.getConnection().getApiShipConnection()
+                                super.getShipConnection().getApiShipConnection()
                             );
                     }
                     stopListener.stop();
@@ -146,7 +144,7 @@ public class ShipClientHandler extends WebSocketHandler {
                         bytes = messageBuffer.toByteArray();
                         messageBuffer.reset();
 
-                        super.getConnection().onMessage(bytes);
+                        super.getShipConnection().onMessage(bytes);
                     }
                 }
             }
@@ -156,11 +154,10 @@ public class ShipClientHandler extends WebSocketHandler {
 
     @Override
     public void close() {
-        node.removeCurrentRemoteSki(getPeerSki());
-        cancelFutures(new CancellationException(
-            "Connection closed before it could be established"));
-        if (getConnection() != null) {
-            getConnection().stopStateTimeouts();
+        super.close();
+
+        if (getShipConnection() != null) {
+            getShipConnection().stopStateTimeouts();
             notifyConnectionHandlerOnClose();
         }
         if (channel.isActive()) {

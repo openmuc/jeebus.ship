@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -167,8 +166,8 @@ public class ShipServer {
     public synchronized void stop() {
         log.info("stopping {}", logPrefix);
         handlers.forEach((handler -> {
-            if (handler.getConnection() != null) {
-                handler.getConnection().stopStateTimeouts();
+            if (handler.getShipConnection() != null) {
+                handler.getShipConnection().stopStateTimeouts();
             }
             // use handler.close() if not working, so it waits until the channel
             // closes
@@ -195,19 +194,24 @@ public class ShipServer {
         nodeContext.setConnHandler(connHandler);
     }
 
-    public synchronized void addHandler(ShipServerHandler handler) {
+    public synchronized void addHandlerWhenReady(ShipServerHandler handler) {
         Objects.requireNonNull(handler);
 
         handler
             .getWssHandshakeFuture()
             .orTimeout(WSS_HANDSHAKE_TIMEOUT, SECONDS)
-            .thenRun(() -> handlers.add(handler))
-            .thenCompose(ignored -> handler.getConnection().start())
+            .thenAccept(connection -> {
+                if (connection != null) {
+                    handlers.add(handler);
+                    handler.getShipConnection().start();
+                }
+            })
             .exceptionally(throwable -> {
                 handler.close();
-                log.error(
-                    "{}: WSS handshake or connection start failed:",
+                log.warn(
+                    "{} to {}: WSS handshake or connection start failed:",
                     logPrefix,
+                    handler.getChannel().remoteAddress(),
                     throwable
                 );
                 return null;
@@ -215,7 +219,9 @@ public class ShipServer {
     }
 
     public synchronized void removeHandler(ShipServerHandler handler) {
-        handlers.remove(handler);
+        if (handler != null) {
+            handlers.remove(handler);
+        }
     }
 
     public String getWssPath() {
