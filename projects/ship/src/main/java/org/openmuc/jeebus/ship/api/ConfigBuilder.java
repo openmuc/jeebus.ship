@@ -14,6 +14,7 @@ import org.bouncycastle.asn1.x500.X500Name;
 import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 import org.openmuc.jeebus.ship.api.cert.MemoryCertificateStorage;
 import org.openmuc.jeebus.ship.node.KeyManagement;
+import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.util.ShipUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,6 +95,13 @@ public final class ConfigBuilder {
     @SuppressWarnings("HardcodedFileSeparator")
     private String wssPath = "/ship/";
     private boolean keepAlive = true;
+
+    private AutoConnectPolicy autoConnectPolicy = AutoConnectPolicy.TRUSTED;
+    private long reconnectInitialDelay = ShipNodeParameters.RECONNECT_INITIAL_DELAY;
+    private long reconnectMaxDelay = ShipNodeParameters.RECONNECT_MAX_DELAY;
+    private double reconnectBackoffFactor = ShipNodeParameters.RECONNECT_BACKOFF_FACTOR;
+    private long reconnectDelayAfterRegularClose =
+        ShipNodeParameters.RECONNECT_DELAY_AFTER_REGULAR_CLOSE;
 
     public ConfigBuilder() {
     }
@@ -360,6 +368,69 @@ public final class ConfigBuilder {
     }
 
     /**
+     * @param autoConnectPolicy
+     *     defines to which remote SHIP nodes this node establishes connections on its
+     *     own, both after service discovery and after a connection was terminated or
+     *     interrupted. Defaults to {@link AutoConnectPolicy#TRUSTED}.
+     * @return the updated {@link ConfigBuilder}
+     * @see "SHIP:5 Service Discovery; SHIP:6 Connection Establishment"
+     */
+    public ConfigBuilder withAutoConnectPolicy(AutoConnectPolicy autoConnectPolicy) {
+        this.autoConnectPolicy = autoConnectPolicy;
+        return this;
+    }
+
+    /**
+     * @param initialDelayInMilliseconds
+     *     the delay before the first reconnection attempt after an unexpected
+     *     connection loss. Defaults to {@code 1000}.
+     * @return the updated {@link ConfigBuilder}
+     * @see ConfigBuilder#withReconnectBackoffFactor(double)
+     */
+    public ConfigBuilder withReconnectInitialDelay(long initialDelayInMilliseconds) {
+        this.reconnectInitialDelay = initialDelayInMilliseconds;
+        return this;
+    }
+
+    /**
+     * @param maxDelayInMilliseconds
+     *     the upper bound for the exponentially growing reconnection delay. Defaults
+     *     to {@code 60000}.
+     * @return the updated {@link ConfigBuilder}
+     * @see ConfigBuilder#withReconnectBackoffFactor(double)
+     */
+    public ConfigBuilder withReconnectMaxDelay(long maxDelayInMilliseconds) {
+        this.reconnectMaxDelay = maxDelayInMilliseconds;
+        return this;
+    }
+
+    /**
+     * @param factor
+     *     the factor by which the reconnection delay grows with each attempt. Must be
+     *     at least {@code 1.0}. Defaults to {@code 2.0}.
+     * @return the updated {@link ConfigBuilder}
+     * @see ConfigBuilder#withReconnectInitialDelay(long)
+     */
+    public ConfigBuilder withReconnectBackoffFactor(double factor) {
+        this.reconnectBackoffFactor = factor;
+        return this;
+    }
+
+    /**
+     * @param delayInMilliseconds
+     *     the delay before a reconnection attempt after a regular connection
+     *     termination. Defaults to {@code 30000}.
+     * @return the updated {@link ConfigBuilder}
+     * @see "SHIP:13.4.7.1.2"
+     */
+    public ConfigBuilder withReconnectDelayAfterRegularClose(
+        long delayInMilliseconds
+    ) {
+        this.reconnectDelayAfterRegularClose = delayInMilliseconds;
+        return this;
+    }
+
+    /**
      * @param brand
      *     The brand of the device. It is announced via the mDNS TXT record. Defaults
      *     to {@code "jEEBus"}.
@@ -437,6 +508,11 @@ public final class ConfigBuilder {
             .withCertificateDistinguishedName(certificateDistinguishedName)
             .withWssPath(wssPath)
             .withKeepAlive(keepAlive)
+            .withAutoConnectPolicy(autoConnectPolicy)
+            .withReconnectInitialDelay(reconnectInitialDelay)
+            .withReconnectMaxDelay(reconnectMaxDelay)
+            .withReconnectBackoffFactor(reconnectBackoffFactor)
+            .withReconnectDelayAfterRegularClose(reconnectDelayAfterRegularClose)
             .withNetworkInterfaceScanInitialDelay(Optional
                 .ofNullable(networkInterfaceScanInitialDelay)
                 .orElse(getRandomInitialDelay()));
@@ -491,6 +567,30 @@ public final class ConfigBuilder {
         validateSizeInBytes("SHIP-ID", id);
         validateSizeInBytes("mDNS Service Instance", mDnsServiceInstance);
 
+        if (autoConnectPolicy == null) {
+            throw new IllegalStateException("autoConnectPolicy must be set");
+        }
+        if (reconnectInitialDelay < 0) {
+            throw new IllegalStateException(
+                "reconnectInitialDelay must not be negative"
+            );
+        }
+        if (reconnectMaxDelay < reconnectInitialDelay) {
+            throw new IllegalStateException(
+                "reconnectMaxDelay must not be smaller than reconnectInitialDelay"
+            );
+        }
+        if (reconnectBackoffFactor < 1.0) {
+            throw new IllegalStateException(
+                "reconnectBackoffFactor must be at least 1.0"
+            );
+        }
+        if (reconnectDelayAfterRegularClose < 0) {
+            throw new IllegalStateException(
+                "reconnectDelayAfterRegularClose must not be negative"
+            );
+        }
+
         try {
             new X500Name(certificateDistinguishedName);
         }
@@ -522,7 +622,12 @@ public final class ConfigBuilder {
             certificateValidity,
             certificateDistinguishedName,
             wssPath,
-            keepAlive
+            keepAlive,
+            autoConnectPolicy,
+            reconnectInitialDelay,
+            reconnectMaxDelay,
+            reconnectBackoffFactor,
+            reconnectDelayAfterRegularClose
         );
     }
 

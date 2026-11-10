@@ -10,6 +10,7 @@
 
 package org.openmuc.jeebus.ship.node;
 
+import org.openmuc.jeebus.ship.api.AutoConnectPolicy;
 import org.openmuc.jeebus.ship.api.cert.CertificateStorage;
 
 import java.net.InetSocketAddress;
@@ -38,7 +39,12 @@ public class ShipConfig extends org.openmuc.jeebus.ship.api.ShipConfig {
         int certificateValidity,
         String certificateDistinguishedName,
         String wssPath,
-        boolean keepAlive
+        boolean keepAlive,
+        AutoConnectPolicy autoConnectPolicy,
+        long reconnectInitialDelay,
+        long reconnectMaxDelay,
+        double reconnectBackoffFactor,
+        long reconnectDelayAfterRegularClose
     ) {
         super(
             id,
@@ -58,7 +64,12 @@ public class ShipConfig extends org.openmuc.jeebus.ship.api.ShipConfig {
             certificateValidity,
             certificateDistinguishedName,
             wssPath,
-            keepAlive
+            keepAlive,
+            autoConnectPolicy,
+            reconnectInitialDelay,
+            reconnectMaxDelay,
+            reconnectBackoffFactor,
+            reconnectDelayAfterRegularClose
         );
     }
 }

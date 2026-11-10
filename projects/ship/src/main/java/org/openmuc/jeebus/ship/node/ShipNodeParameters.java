@@ -63,6 +63,28 @@ public class ShipNodeParameters {
     public static final int T_HELLO_INIT = 120;
     public static final List<String> SUPPORTED_FORMATS = singletonList("JSON-UTF8");
 
+    /**
+     * Default delay in milliseconds before the first reconnection attempt.
+     */
+    public static final long RECONNECT_INITIAL_DELAY = 1000;
+    /**
+     * Default upper bound in milliseconds for the exponential reconnection backoff.
+     */
+    public static final long RECONNECT_MAX_DELAY = 60000;
+    /**
+     * Default factor by which the reconnection delay grows per attempt.
+     */
+    public static final double RECONNECT_BACKOFF_FACTOR = 2.0;
+    /**
+     * Default delay in milliseconds before a reconnection attempt after a regular
+     * connection termination.
+     */
+    public static final long RECONNECT_DELAY_AFTER_REGULAR_CLOSE = 30000;
+    /**
+     * Relative jitter applied to the computed reconnection delay.
+     */
+    public static final double RECONNECT_JITTER = 0.2;
+
     public static int getTrustLevel(boolean isAutoAccept) {
         return isAutoAccept ? AUTO_ACCEPT_TRUST_LEVEL : 0;
     }

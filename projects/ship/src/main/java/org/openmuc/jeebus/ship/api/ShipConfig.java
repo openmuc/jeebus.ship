@@ -49,6 +49,12 @@ public class ShipConfig {
     private final String wssPath;
     private final boolean keepAlive;
 
+    private final AutoConnectPolicy autoConnectPolicy;
+    private final long reconnectInitialDelay;
+    private final long reconnectMaxDelay;
+    private final double reconnectBackoffFactor;
+    private final long reconnectDelayAfterRegularClose;
+
     public ShipConfig(
         String id,
         boolean serverEnabled,
@@ -67,7 +73,12 @@ public class ShipConfig {
         int certificateValidity,
         String certificateDistinguishedName,
         String wssPath,
-        boolean keepAlive
+        boolean keepAlive,
+        AutoConnectPolicy autoConnectPolicy,
+        long reconnectInitialDelay,
+        long reconnectMaxDelay,
+        double reconnectBackoffFactor,
+        long reconnectDelayAfterRegularClose
     ) {
         this.id = id;
         this.serverEnabled = serverEnabled;
@@ -87,6 +98,11 @@ public class ShipConfig {
         this.certificateDistinguishedName = certificateDistinguishedName;
         this.wssPath = wssPath;
         this.keepAlive = keepAlive;
+        this.autoConnectPolicy = autoConnectPolicy;
+        this.reconnectInitialDelay = reconnectInitialDelay;
+        this.reconnectMaxDelay = reconnectMaxDelay;
+        this.reconnectBackoffFactor = reconnectBackoffFactor;
+        this.reconnectDelayAfterRegularClose = reconnectDelayAfterRegularClose;
     }
 
     /**
@@ -108,6 +124,44 @@ public class ShipConfig {
 
     public String getWssPath() {
         return wssPath;
+    }
+
+    /**
+     * @return the policy that defines to which remote SHIP nodes this node connects
+     *     on its own.
+     */
+    public AutoConnectPolicy getAutoConnectPolicy() {
+        return autoConnectPolicy;
+    }
+
+    /**
+     * @return the delay in milliseconds before the first reconnection attempt.
+     */
+    public long getReconnectInitialDelay() {
+        return reconnectInitialDelay;
+    }
+
+    /**
+     * @return the upper bound in milliseconds for the exponential reconnection
+     *     backoff.
+     */
+    public long getReconnectMaxDelay() {
+        return reconnectMaxDelay;
+    }
+
+    /**
+     * @return the factor by which the reconnection delay grows per attempt.
+     */
+    public double getReconnectBackoffFactor() {
+        return reconnectBackoffFactor;
+    }
+
+    /**
+     * @return the delay in milliseconds before a reconnection attempt after a regular
+     *     connection termination.
+     */
+    public long getReconnectDelayAfterRegularClose() {
+        return reconnectDelayAfterRegularClose;
     }
 
     public CertificateStorage getCertificateStorage() {
@@ -177,7 +231,7 @@ public class ShipConfig {
     @Override
     public String toString() {
         return String.format(
-            "ShipConfig{id='%s', serverEnabled=%s, serverBindAddresses=%s, anyAddressEnabled=%s, autoAcceptEnabled=%s, trustedSkis=%s, networkInterfaceScanInitialDelay=%d, networkInterfaceScanInterval=%d, mDnsServiceInstance='%s', mDnsDomain='%s', brand='%s', type='%s', model='%s', certificateStorage=%s, certificateValidity=%d, certificateDistinguishedName='%s', wssPath='%s', keepAlive=%s}",
+            "ShipConfig{id='%s', serverEnabled=%s, serverBindAddresses=%s, anyAddressEnabled=%s, autoAcceptEnabled=%s, trustedSkis=%s, networkInterfaceScanInitialDelay=%d, networkInterfaceScanInterval=%d, mDnsServiceInstance='%s', mDnsDomain='%s', brand='%s', type='%s', model='%s', certificateStorage=%s, certificateValidity=%d, certificateDistinguishedName='%s', wssPath='%s', keepAlive=%s, autoConnectPolicy=%s, reconnectInitialDelay=%d, reconnectMaxDelay=%d, reconnectBackoffFactor=%s, reconnectDelayAfterRegularClose=%d}",
             id,
             serverEnabled,
             serverBindAddresses,
@@ -195,7 +249,12 @@ public class ShipConfig {
             certificateValidity,
             certificateDistinguishedName,
             wssPath,
-            keepAlive
+            keepAlive,
+            autoConnectPolicy,
+            reconnectInitialDelay,
+            reconnectMaxDelay,
+            reconnectBackoffFactor,
+            reconnectDelayAfterRegularClose
         );
     }
 }
