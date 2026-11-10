@@ -37,7 +37,7 @@ To run all contained unit tests, run
 ./gradlew test
 ```
 
-There are three subprojects in the `projects` folder. `ship` contains the
+There are two subprojects in the `projects` folder. `ship` contains the
 general implementation of SHIP, while `demo` contains
 minimal example applications showing how jEEBus.SHIP can be configured and used.
 

@@ -34,3 +34,6 @@ bin/
 # IntelliJ
 out/
 
+AGENTS.md
+spec/
+.junie/
