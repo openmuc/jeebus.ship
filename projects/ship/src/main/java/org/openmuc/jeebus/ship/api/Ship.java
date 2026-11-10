@@ -17,7 +17,6 @@ import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
 import org.openmuc.jeebus.ship.node.websocket.server.ShipServer;
-import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,13 +27,10 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.function.Predicate;
 
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
-import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.safelyParseSocketAddress;
 
 public class Ship implements ShipInterface, AutoCloseable {
@@ -108,54 +104,7 @@ public class Ship implements ShipInterface, AutoCloseable {
         String expectedSki
     ) {
         assertNodeAvailable();
-
-        if (expectedSki != null && !trusts(expectedSki)) {
-             log.debug("Opening a connection to a device that is not trusted yet.");
-        }
-
-        return getExistingConnection(socket, expectedShipId)
-            .map(connection -> {
-                log.info(
-                    "Reusing existing connection to {} ({})",
-                    expectedShipId,
-                    beautify(socket)
-                );
-                return CompletableFuture.completedFuture(connection.getApiShipConnection());
-            })
-            .orElseGet(() -> CompletableFuture.supplyAsync(() -> node.createClient(
-                    socket,
-                    path,
-                    expectedShipId,
-                    expectedSki
-                ))
-                .thenCompose(ShipClient::start)
-                .thenApply(ShipClientHandler::getShipConnection)
-                .thenCompose(ShipConnection::start));
-    }
-
-    private Optional<ShipConnectionImpl> getExistingConnection(
-        InetSocketAddress socket,
-        String shipId
-    ) {
-        assertNodeAvailable();
-        return node
-            .getAllWebSocketHandlers()
-            .stream()
-            .filter(Objects::nonNull)
-            .filter(handler ->
-                Objects.equals(
-                    Optional
-                        .ofNullable(handler.getShipConnection())
-                        .map(ShipConnectionImpl::getRemoteId)
-                        // invalid SKI so we never compare null to null
-                        .orElse("invalid"),
-                    shipId
-                ) || Objects.equals(handler.getRemoteSocketAddress(), socket)
-            )
-            .map(WebSocketHandler::getShipConnection)
-            .filter(Objects::nonNull)
-            .filter(Predicate.not(ShipConnectionImpl::isConnectionCloseState))
-            .findFirst();
+        return node.openConnection(socket, path, expectedShipId, expectedSki);
     }
 
     public String getOwnSki() {

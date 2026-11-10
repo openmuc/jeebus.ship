@@ -14,12 +14,16 @@ import io.netty.handler.ssl.SslContext;
 import org.openmuc.jeebus.ship.api.ConnectionHandler;
 import org.openmuc.jeebus.ship.api.ShipConfig;
 import org.openmuc.jeebus.ship.api.ShipConnectionInfoSnapshot;
+import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.api.cert.CertificateStoreException;
 import org.openmuc.jeebus.ship.api.cert.ShipAuthenticationException;
 import org.openmuc.jeebus.ship.node.service.ServiceRegistry;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
+import org.openmuc.jeebus.ship.node.websocket.client.ShipClientHandler;
 import org.openmuc.jeebus.ship.node.websocket.server.ShipServer;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
+import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,12 +32,14 @@ import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.openmuc.jeebus.ship.api.ShipConnectionInfoSnapshot.ConnectionTypeEnum.CLIENT_CONNECTION_TO_PEER;
 import static org.openmuc.jeebus.ship.api.ShipConnectionInfoSnapshot.ConnectionTypeEnum.PEER_CONNECTED_TO_SERVER;
 import static org.openmuc.jeebus.ship.node.ShipNodeParameters.USER_VERIFIED_TRUST_LEVEL;
+import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
 public class ShipNodeImpl {
 
@@ -148,6 +154,76 @@ public class ShipNodeImpl {
             clients.stream()
                 .map(ShipClient::getHandler)
         ).collect(Collectors.toSet());
+    }
+
+    /**
+     * Opens a connection to the given socket. If a connection with the given SHIP
+     * node already exists, that {@link ShipConnectionInterface} is returned
+     * immediately in a completed Future. The reason for this behavior is that we
+     * want to avoid double connections, as they are always messy and unreliable to
+     * handle.
+     *
+     * @param socket
+     *     the address to connect to
+     * @param path
+     *     the WSS path to use
+     * @param expectedShipId
+     *     the expected SHIP ID of the peer, may be {@code null}
+     * @param expectedSki
+     *     the expected SKI of the peer, may be {@code null}
+     * @return a future holding the established connection
+     */
+    public CompletableFuture<ShipConnectionInterface> openConnection(
+        InetSocketAddress socket,
+        String path,
+        String expectedShipId,
+        String expectedSki
+    ) {
+        if (expectedSki != null && !keyManagement.trusts(expectedSki)) {
+            log.debug("Opening a connection to a device that is not trusted yet.");
+        }
+
+        return getExistingConnection(socket, expectedShipId)
+            .map(connection -> {
+                log.info(
+                    "Reusing existing connection to {} ({})",
+                    expectedShipId,
+                    beautify(socket)
+                );
+                return CompletableFuture.completedFuture(connection.getApiShipConnection());
+            })
+            .orElseGet(() -> CompletableFuture.supplyAsync(() -> createClient(
+                    socket,
+                    path,
+                    expectedShipId,
+                    expectedSki
+                ))
+                .thenCompose(ShipClient::start)
+                .thenApply(ShipClientHandler::getShipConnection)
+                .thenCompose(ShipConnection::start));
+    }
+
+    private Optional<ShipConnectionImpl> getExistingConnection(
+        InetSocketAddress socket,
+        String shipId
+    ) {
+        return getAllWebSocketHandlers()
+            .stream()
+            .filter(Objects::nonNull)
+            .filter(handler ->
+                Objects.equals(
+                    Optional
+                        .ofNullable(handler.getShipConnection())
+                        .map(ShipConnectionImpl::getRemoteId)
+                        // invalid SKI so we never compare null to null
+                        .orElse("invalid"),
+                    shipId
+                ) || Objects.equals(handler.getRemoteSocketAddress(), socket)
+            )
+            .map(WebSocketHandler::getShipConnection)
+            .filter(Objects::nonNull)
+            .filter(Predicate.not(ShipConnectionImpl::isConnectionCloseState))
+            .findFirst();
     }
 
     public ShipClient createClient(
