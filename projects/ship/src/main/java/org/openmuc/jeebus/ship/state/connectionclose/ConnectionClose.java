@@ -35,4 +35,8 @@ public abstract class ConnectionClose {
         this.closeMessage = closeMessage;
     }
 
+    public CloseMsg getCloseMsg() {
+        return closeMessage;
+    }
+
 }
