@@ -10,17 +10,34 @@
 
 package org.openmuc.jeebus.ship.node;
 
-import org.openmuc.jeebus.ship.api.ConnectionHandler;
-import org.openmuc.jeebus.ship.api.DisconnectReason;
-import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
-import org.openmuc.jeebus.ship.api.ShipService;
+import io.netty.handler.ssl.SslContext;
+import org.openmuc.jeebus.ship.api.*;
+import org.openmuc.jeebus.ship.node.websocket.client.ShipClient;
 
+import javax.net.ssl.SSLException;
+import java.net.InetSocketAddress;
+import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import static org.openmuc.jeebus.ship.api.AutoConnectPolicy.ALL;
+import static org.openmuc.jeebus.ship.api.AutoConnectPolicy.TRUSTED;
 
 public class ConnectionSupervisor implements ConnectionHandler {
 
-    private Map<Identity, ShipService> knownServices = new HashMap<>();
+    private Map<String, ShipPeer> knownPeers = new HashMap<>();
+    private AutoConnectPolicy autoConnect;
+    private KeyManagement trustStore;
+
+    public ConnectionSupervisor(
+        AutoConnectPolicy autoConnect,
+        KeyManagement trustStore
+    ) {
+        this.autoConnect = autoConnect;
+        this.trustStore = trustStore;
+    }
 
     @Override
     public void onMessageReceived(
@@ -42,15 +59,69 @@ public class ConnectionSupervisor implements ConnectionHandler {
     @Override
     public void serviceAdded(ShipService service) {
 
+        String peerSki = service.getSki();
+
+        knownPeers.computeIfAbsent(peerSki, ShipPeer::new)
+            .addService(service);
+
+        if (autoConnect == ALL
+            || autoConnect == TRUSTED
+            && trustStore.trusts(peerSki)
+        ) {
+            knownPeers.computeIfAbsent(peerSki, ShipPeer::new)
+                .getActiveConnection()
+                .ifAbsent()
+        }
     }
 
     @Override
     public void serviceRemoved(ShipService service) {
+        knownPeers.computeIfPresent(
+            service.getSki(),
+            (ski, shipPeer) -> shipPeer.removeService(service)
+        );
 
     }
 
     @Override
     public void clientConnected(ShipConnectionInterface connection) {
+        String peerSki = connection.getRemoteSki();
 
+        knownPeers
+            .computeIfAbsent(peerSki, ShipPeer::new)
+            .setSetActiveConnection(connection);
+    }
+
+    public ShipClient createClient(
+        InetSocketAddress address,
+        String path,
+        String expectedId,
+        String expectedSki
+    ) {
+        try {
+            SslContext clientCtx = sslContextFactory.generateClientSslContext(
+                keyManagement.getCert()
+            );
+            ShipNodeContext nodeCtx = new ShipNodeContext(
+                this.keyManagement,
+                nodeConfig.getId(),
+                expectedId,
+                expectedSki
+            );
+            nodeCtx.setConnHandler(connHandler);
+            ShipClient client = new ShipClient(
+                clientCtx,
+                address,
+                path,
+                nodeCtx,
+                this
+            );
+            addClient(client);
+            return client;
+        }
+        catch (SSLException | URISyntaxException e) {
+            log.error("Exception while creating a SHIP client: ", e);
+        }
+        return null;
     }
 }

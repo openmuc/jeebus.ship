@@ -226,38 +226,6 @@ public class ShipNodeImpl {
             .findFirst();
     }
 
-    public ShipClient createClient(
-        InetSocketAddress address,
-        String path,
-        String expectedId,
-        String expectedSki
-    ) {
-        try {
-            SslContext clientCtx = sslContextFactory.generateClientSslContext(
-                keyManagement.getCert()
-            );
-            ShipNodeContext nodeCtx = new ShipNodeContext(
-                this.keyManagement,
-                nodeConfig.getId(),
-                expectedId,
-                expectedSki
-            );
-            nodeCtx.setConnHandler(connHandler);
-            ShipClient client = new ShipClient(
-                clientCtx,
-                address,
-                path,
-                nodeCtx,
-                this
-            );
-            addClient(client);
-            return client;
-        }
-        catch (SSLException | URISyntaxException e) {
-            log.error("Exception while creating a SHIP client: ", e);
-        }
-        return null;
-    }
 
     public ShipServer createServer(
         Set<InetSocketAddress> bindAddresses,
