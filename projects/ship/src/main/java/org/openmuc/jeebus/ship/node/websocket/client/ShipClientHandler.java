@@ -19,12 +19,12 @@ import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketHandshakeException;
+import io.netty.util.ReferenceCountUtil;
 import org.openmuc.jeebus.ship.node.ShipNodeContext;
 import org.openmuc.jeebus.ship.node.ShipNodeImpl;
 import org.openmuc.jeebus.ship.node.websocket.WebSocketHandler;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
 
-import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
 import static org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl.Role.CLIENT;
 import static org.openmuc.jeebus.ship.util.ShipUtilities.beautify;
 
@@ -68,6 +68,11 @@ public class ShipClientHandler extends WebSocketHandler {
     @Override
     public synchronized void channelRead0(ChannelHandlerContext ctx, Object msg) {
         Channel channel = ctx.channel();
+
+        if (isClosed()) {
+            ReferenceCountUtil.release(msg);
+            return;
+        }
 
         if (!handshaker.isHandshakeComplete()) {
             try {
@@ -118,24 +123,18 @@ public class ShipClientHandler extends WebSocketHandler {
             if (isPingPongFrame(frame)) {
                 handlePingPongFrame(frame);
             }
+            else if (frame instanceof CloseWebSocketFrame) {
+                handleCloseFrame((CloseWebSocketFrame) frame);
+            }
             else {
                 byte[] bytes = handleWebSocketFrame(frame);
 
                 if (bytes == null) {
                     log.warn(
-                        "{} received empty/invalid Message or CloseWebSocketFrame"
-                            + ". Closing connection.",
+                        "{} received empty/invalid Message. Closing connection.",
                         nodeContext.getLogPrefix()
                     );
-                    if (nodeContext.getConnHandler() != null) {
-                        nodeContext
-                            .getConnHandler()
-                            .onDisconnect(
-                                ERROR,
-                                super.getShipConnection().getApiShipConnection()
-                            );
-                    }
-                    stopListener.stop();
+                    close();
                 }
                 else {
                     messageBuffer.writeBytes(bytes);
@@ -153,17 +152,7 @@ public class ShipClientHandler extends WebSocketHandler {
     }
 
     @Override
-    public void close() {
-        super.close();
-
-        if (getShipConnection() != null) {
-            getShipConnection().stopStateTimeouts();
-            notifyConnectionHandlerOnClose();
-        }
-        if (channel.isActive()) {
-            channel.writeAndFlush(new CloseWebSocketFrame());
-        }
-        channel.close().awaitUninterruptibly();
+    protected void onClosed() {
         stopListener.stop();
     }
 

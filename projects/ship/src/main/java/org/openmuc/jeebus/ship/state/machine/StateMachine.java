@@ -10,6 +10,7 @@
 
 package org.openmuc.jeebus.ship.state.machine;
 
+import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
 import org.openmuc.jeebus.ship.node.ShipNodeParameters;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnection;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
@@ -218,7 +219,8 @@ public class StateMachine implements StateHandlerContext {
 
     @Override
     public void closeConnection() {
-        shipConnection.closeImmediately();
+        ((ShipConnectionImpl) shipConnection)
+            .close(WebSocketCloseStatus.PROTOCOL_ERROR);
         timeoutExecutor.shutdown();
     }
 

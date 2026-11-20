@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.2.2] - 
+
+### Changed
+
+### Added
+
+- Add `DisconnectReason.REMOTE_CLOSED` to indicate connections that were closed by
+  a peer
+
+### Fixed
+
+- Fix reference leaks of incoming WebSocket frames
+- Overhaul Connection Closures according to SHIP and RFC 6455
+  - Report `DisconnectReason.REGULAR_END` instead of `ERROR` when DEV-A completes
+    the connection close procedure
+  - Notify `ConnectionHandler#onDisconnect` exactly once per connection
+  - Handle incoming WebSocket close frames according to RFC 6455
+    - Echo the received status code back and close the connection afterwards
+  - Fix a race condition in the client close path that could drop the outgoing close frame
+  - Send a close frame when our SHIP server closes a connection
+  - Send meaningful WebSocket status codes when closing a connection:
+    - `closeImmediately()` sends 1011 instead of 1000
+    - Aborted CMI, Hello and PIN states send 1002
+
 ## [3.2.1] - 2026-09-22
 
 ### Fixed

@@ -10,6 +10,7 @@
 
 package org.openmuc.jeebus.ship.state.connectionclose;
 
+import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.message.ShipMessageFactory;
 import org.openmuc.jeebus.ship.message.connectionclose.CloseMsg;
 import org.openmuc.jeebus.ship.shipconnection.ShipConnectionImpl;
@@ -28,7 +29,7 @@ public class ConnectionCloseDevA extends ConnectionClose {
             executor.schedule(
                 () -> {
                     if (!confirmationReceived) {
-                        this.connection.closeImmediately();
+                        this.connection.close(DisconnectReason.REGULAR_END);
                     }
                 },
                 closeMessage.getMaxTime(),
@@ -44,6 +45,6 @@ public class ConnectionCloseDevA extends ConnectionClose {
      */
     public void setConfirmationReceivedTrue() {
         this.confirmationReceived = true;
-        connection.closeImmediately();
+        connection.close(DisconnectReason.REGULAR_END);
     }
 }

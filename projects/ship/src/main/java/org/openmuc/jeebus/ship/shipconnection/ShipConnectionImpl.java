@@ -10,6 +10,7 @@
 
 package org.openmuc.jeebus.ship.shipconnection;
 
+import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
 import org.openmuc.jeebus.ship.api.DisconnectReason;
 import org.openmuc.jeebus.ship.api.ShipConnectionInterface;
 import org.openmuc.jeebus.ship.message.MessageType;
@@ -443,25 +444,30 @@ public class ShipConnectionImpl implements ShipConnection {
             );
             CloseMsg closeMsg = new CloseMsg(CONFIRM);
             sendRawMessage(ShipMessageFactory.parseConnectionCloseBody(closeMsg));
-            org.openmuc.jeebus.ship.api.ConnectionHandler connHandler = nodeContext.getConnHandler();
-            if (connHandler != null) {
-                connHandler.onDisconnect(
-                    DisconnectReason.REGULAR_END,
-                    this
-                );
-            }
-            webSocketHandler.close();
-            if (!connectionFuture.isDone()) {
-                connectionFuture.completeExceptionally(new CancellationException(
-                    "Connection was closed."
-                ));
-            }
+            close(DisconnectReason.REGULAR_END);
         }
+    }
+
+    /**
+     * Closes the connection on transport level and reports the given reason to the
+     * {@link org.openmuc.jeebus.ship.api.ConnectionHandler}.
+     */
+    public void close(DisconnectReason reason) {
+        webSocketHandler.close(reason);
+        cancelConnectionFuture();
+    }
+
+    public void close(WebSocketCloseStatus status) {
+        webSocketHandler.close(status);
+        cancelConnectionFuture();
     }
 
     @Override
     public void closeImmediately() {
-        webSocketHandler.close();
+        close(WebSocketCloseStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private void cancelConnectionFuture() {
         if (!connectionFuture.isDone()) {
             connectionFuture.completeExceptionally(new CancellationException(
                 "Connection was closed."

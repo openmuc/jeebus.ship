@@ -40,10 +40,15 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.*;
 
+import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.ENDPOINT_UNAVAILABLE;
+import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INTERNAL_SERVER_ERROR;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALID_MESSAGE_TYPE;
+import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.NORMAL_CLOSURE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
+import static org.openmuc.jeebus.ship.api.DisconnectReason.REGULAR_END;
+import static org.openmuc.jeebus.ship.api.DisconnectReason.REMOTE_CLOSED;
 import static org.openmuc.jeebus.ship.message.MessageUtility.wrapInBinaryFrame;
 
 public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Object> {
@@ -62,6 +67,12 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     protected final CompletableFuture<ShipConnectionInterface> wssHandshakeFuture;
 
     protected boolean pongReceived;
+
+    private boolean closeFrameSent;
+    private boolean closed;
+    private boolean closedNotified;
+    private boolean disconnectNotified;
+    private DisconnectReason disconnectReason = ERROR;
 
     protected final ByteArrayOutputStream messageBuffer
         = new ByteArrayOutputStream();
@@ -109,53 +120,109 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
             log.debug("{} received a pong frame", nodeContext.getLogPrefix());
             pongReceived = true;
         }
+
+        frame.release();
     }
 
     protected byte[] handleWebSocketFrame(WebSocketFrame frame) {
-        if (frame instanceof TextWebSocketFrame) {
-            log.warn(
-                "{} received a text frame and will terminate the connection with status code 1003",
-                nodeContext.getLogPrefix()
-            );
-            // terminate with status code 1003 (unacceptable data)
-            channel
-                .writeAndFlush(new CloseWebSocketFrame(INVALID_MESSAGE_TYPE))
-                .addListener(ChannelFutureListener.CLOSE);
-            // listener is added to make sure channel will only close if message was written
+        try {
+            if (frame instanceof TextWebSocketFrame) {
+                log.warn(
+                    "{} received a text frame and will terminate the connection with status code 1003",
+                    nodeContext.getLogPrefix()
+                );
+                // terminate with status code 1003 (unacceptable data)
+                sendCloseFrame(new CloseWebSocketFrame(INVALID_MESSAGE_TYPE));
+            }
+            else if (frame instanceof BinaryWebSocketFrame
+                || frame instanceof ContinuationWebSocketFrame
+            ) {
+                ByteBuf frameContent = frame.content();
+
+                // parse the message for logging before passing it to the state handler
+                byte[] bytes = new byte[frameContent.readableBytes()];
+                frameContent.readBytes(bytes);
+
+                return bytes;
+            }
+            else {
+                log.warn(
+                    "{} unsupported frame type: {}."
+                        + " Terminating connection with status code 1002",
+                    nodeContext.getLogPrefix(),
+                    frame.getClass().getName()
+                );
+                sendCloseFrame(new CloseWebSocketFrame(PROTOCOL_ERROR));
+            }
+
+            return null;
         }
-        else if (frame instanceof BinaryWebSocketFrame
-            || frame instanceof ContinuationWebSocketFrame
-        ) {
-            ByteBuf frameContent = frame.content();
-
-            // parse the message for logging before passing it to the state handler
-            byte[] bytes = new byte[frameContent.readableBytes()];
-            frameContent.readBytes(bytes);
-
-            /* Squelch a warning about potential memory leaks when ByteBuf
-             * is garbage collected before it is released.
-             * See https://netty.io/wiki/reference-counted-objects.html */
-            frameContent.release();
-
-            return bytes;
+        finally {
+            frame.release();
         }
-        else if (frame instanceof CloseWebSocketFrame) {
-            // close the connection after sending
-            log.info("{} received a closing frame", nodeContext.getLogPrefix());
+    }
+
+    /**
+     * Answers a close frame received from the peer as required by RFC 6455, section 5.5.1,
+     * and tears the connection down.
+     */
+    protected void handleCloseFrame(CloseWebSocketFrame frame) {
+        int statusCode = frame.statusCode();
+        log.info(
+            "{} received a close frame with status code {}",
+            nodeContext.getLogPrefix(),
+            statusCode
+        );
+
+        close(remoteCloseReason(statusCode), echoOf(statusCode));
+        frame.release();
+    }
+
+    private static WebSocketCloseStatus echoOf(int statusCode) {
+        /* 1005, 1006 and 1015 are reserved for local use and must never be sent, and
+         * isValidStatusCode() also accepts negative values for "no status code". */
+        return statusCode >= 0 && WebSocketCloseStatus.isValidStatusCode(statusCode)
+            ? WebSocketCloseStatus.valueOf(statusCode)
+            : NORMAL_CLOSURE;
+    }
+
+    private static DisconnectReason remoteCloseReason(int statusCode) {
+        return statusCode == NORMAL_CLOSURE.code()
+            || statusCode == ENDPOINT_UNAVAILABLE.code()
+            ? REMOTE_CLOSED
+            : ERROR;
+    }
+
+    private static DisconnectReason localCloseReason(WebSocketCloseStatus status) {
+        return status.code() == NORMAL_CLOSURE.code()
+            || status.code() == ENDPOINT_UNAVAILABLE.code()
+            ? REGULAR_END
+            : ERROR;
+    }
+
+    private static WebSocketCloseStatus toCloseStatus(DisconnectReason reason) {
+        return reason == ERROR ? INTERNAL_SERVER_ERROR : NORMAL_CLOSURE;
+    }
+
+    private void sendCloseFrame(CloseWebSocketFrame frame) {
+        if (closeFrameSent) {
+            frame.release();
+            return;
+        }
+        closeFrameSent = true;
+
+        if (channel == null) {
+            frame.release();
+            return;
+        }
+        if (channel.isActive()) {
+            // the listener makes sure the channel is only closed after the frame was written
+            channel.writeAndFlush(frame).addListener(ChannelFutureListener.CLOSE);
         }
         else {
-            log.warn(
-                "{} unsupported frame type: {}."
-                    + " Terminating connection with status code 1002",
-                nodeContext.getLogPrefix(),
-                frame.getClass().getName()
-            );
-            channel
-                .writeAndFlush(new CloseWebSocketFrame(PROTOCOL_ERROR))
-                .addListener(ChannelFutureListener.CLOSE);
+            frame.release();
+            channel.close();
         }
-
-        return null;
     }
 
     public int getTrustLevel() {
@@ -238,22 +305,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                  * In conclusion, immediately canceling double connections as soon as
                  * they arise seems to be the most reliable way of handling them.
                  */
-                cancelFutures(new CancellationException(
-                    "This is a double connection we are cancelling."
-                ));
-
-                if (connection != null) {
-                    if (nodeContext.getConnHandler() != null) {
-                        nodeContext
-                            .getConnHandler()
-                            .onDisconnect(
-                                DisconnectReason.DOUBLE_CONNECTION,
-                                connection.getApiShipConnection()
-                            );
-                    }
-                }
-
-                this.close();
+                this.close(DisconnectReason.DOUBLE_CONNECTION);
                 return true;
             }
             else {
@@ -288,19 +340,87 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     }
 
     public void close() {
+        close(ERROR);
+    }
+
+    public void close(DisconnectReason reason) {
+        close(reason, toCloseStatus(reason));
+    }
+
+    /**
+     * Closes the connection, sending the given status code to the peer. The
+     * {@link DisconnectReason} reported to the connection handler is derived from it.
+     *
+     * @param status
+     *     the status code to send
+     */
+    public void close(WebSocketCloseStatus status) {
+        close(localCloseReason(status), status);
+    }
+
+    private void close(DisconnectReason reason, WebSocketCloseStatus status) {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        disconnectReason = reason;
+
         if (this.peerSki != null) {
             node.removeCurrentRemoteSki(getPeerSki());
         }
         cancelFutures(new CancellationException(
             "Connection closed before it could be established"));
+
+        messageBuffer.reset();
+
+        if (getShipConnection() != null) {
+            getShipConnection().stopStateTimeouts();
+        }
+        notifyConnectionHandlerOnClose();
+
+        if (channel == null) {
+            notifyClosed();
+            return;
+        }
+
+        channel.closeFuture().addListener(future -> notifyClosed());
+
+        if (!closeFrameSent) {
+            sendCloseFrame(new CloseWebSocketFrame(status));
+        }
     }
 
-    protected void notifyConnectionHandlerOnClose() {
+    /**
+     * Hook for subclasses to release resources that are specific to their role.
+     */
+    protected void onClosed() {
+    }
+
+    private void notifyClosed() {
+        if (closedNotified) {
+            return;
+        }
+        closedNotified = true;
+        onClosed();
+    }
+
+    protected boolean isClosed() {
+        return closed;
+    }
+
+    private void notifyConnectionHandlerOnClose() {
+        if (disconnectNotified
+            || getShipConnection() == null
+            || nodeContext.getConnHandler() == null
+        ) {
+            return;
+        }
         if (getShipConnection().getConnectionFuture().isDone()
             && !getShipConnection().getConnectionFuture().isCompletedExceptionally()
         ) {
+            disconnectNotified = true;
             nodeContext.getConnHandler().onDisconnect(
-                ERROR,
+                disconnectReason,
                 getShipConnection().getApiShipConnection()
             );
         }
