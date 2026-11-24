@@ -14,7 +14,7 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
-import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.concurrent.GlobalEventExecutor;
@@ -88,9 +88,8 @@ public class ShipServer {
 
         log.info("starting {}", logPrefix);
 
-        IoHandlerFactory ioHandlerFactory = NioIoHandler.newFactory();
-        bossGroup = new MultiThreadIoEventLoopGroup(1, ioHandlerFactory);
-        workerGroup = new MultiThreadIoEventLoopGroup(ioHandlerFactory);
+        bossGroup = new NioEventLoopGroup(1);
+        workerGroup = new NioEventLoopGroup();
         bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
