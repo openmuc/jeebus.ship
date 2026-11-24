@@ -12,7 +12,7 @@ package org.openmuc.jeebus.ship.node.websocket.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
-import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -85,7 +85,7 @@ public class ShipClient {
     public CompletableFuture<ShipClientHandler> start() {
         log.info("starting client to connect to {}", uri);
 
-        group = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
+        group = new NioEventLoopGroup(1);
 
         handler = new ShipClientHandler(
             WebSocketClientHandshakerFactory.newHandshaker(
