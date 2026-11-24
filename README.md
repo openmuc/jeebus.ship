@@ -37,6 +37,13 @@ To run all contained unit tests, run
 ./gradlew test
 ```
 
+SHIP uses Netty 4.2 by default. To run the SHIP tests against Netty 4.1, for
+example when deploying into an OSGi runtime that provides its own Netty bundles:
+
+```bash
+./gradlew :ship:test -PnettyVersion=4.1.139.Final
+```
+
 There are two subprojects in the `projects` folder. `ship` contains the
 general implementation of SHIP, while `demo` contains
 minimal example applications showing how jEEBus.SHIP can be configured and used.
