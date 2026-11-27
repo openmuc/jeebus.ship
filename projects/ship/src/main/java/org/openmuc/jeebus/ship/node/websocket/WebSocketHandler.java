@@ -46,6 +46,7 @@ import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.INVALI
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.NORMAL_CLOSURE;
 import static io.netty.handler.codec.http.websocketx.WebSocketCloseStatus.PROTOCOL_ERROR;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.openmuc.jeebus.ship.api.DisconnectReason.DOUBLE_CONNECTION;
 import static org.openmuc.jeebus.ship.api.DisconnectReason.ERROR;
 import static org.openmuc.jeebus.ship.api.DisconnectReason.REGULAR_END;
 import static org.openmuc.jeebus.ship.api.DisconnectReason.REMOTE_CLOSED;
@@ -204,6 +205,12 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         return reason == ERROR ? INTERNAL_SERVER_ERROR : NORMAL_CLOSURE;
     }
 
+    private static String cancellationMessage(DisconnectReason reason) {
+        return reason == DOUBLE_CONNECTION
+            ? "This is a double connection we are cancelling."
+            : "Connection closed before it could be established";
+    }
+
     private void sendCloseFrame(CloseWebSocketFrame frame) {
         if (closeFrameSent) {
             frame.release();
@@ -305,7 +312,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
                  * In conclusion, immediately canceling double connections as soon as
                  * they arise seems to be the most reliable way of handling them.
                  */
-                this.close(DisconnectReason.DOUBLE_CONNECTION);
+                this.close(DOUBLE_CONNECTION);
                 return true;
             }
             else {
@@ -368,8 +375,8 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
         if (this.peerSki != null) {
             node.removeCurrentRemoteSki(getPeerSki());
         }
-        cancelFutures(new CancellationException(
-            "Connection closed before it could be established"));
+
+        cancelFutures(new CancellationException(cancellationMessage(reason)));
 
         messageBuffer.reset();
 
@@ -393,8 +400,7 @@ public abstract class WebSocketHandler extends SimpleChannelInboundHandler<Objec
     /**
      * Hook for subclasses to release resources that are specific to their role.
      */
-    protected void onClosed() {
-    }
+    protected void onClosed() {}
 
     private void notifyClosed() {
         if (closedNotified) {
