@@ -56,6 +56,9 @@ idea {
 
 apply from: "configuration.gradle"
 
+def nettyVersion = providers.gradleProperty("nettyVersion").getOrElse("4.2.17.Final")
+def nettyCodec = nettyVersion.startsWith("4.1.") ? "netty-codec" : "netty-codec-base"
+
 subprojects {
     apply plugin: 'java-library'
     apply plugin: 'biz.aQute.bnd.builder'
@@ -87,19 +90,19 @@ subprojects {
 
         // Beware of case-sensitivity >_<
         // https://mvnrepository.com/artifact/io.netty/netty-bom
-        implementation platform("io.netty:netty-bom:4.2.17.Final")
+        implementation platform("io.netty:netty-bom:${nettyVersion}")
 
         // https://mvnrepository.com/artifact/io.netty
         implementation "io.netty:netty-buffer"
         implementation "io.netty:netty-codec-http"
-        implementation "io.netty:netty-codec-base"
+        implementation "io.netty:${nettyCodec}"
         implementation "io.netty:netty-common"
         implementation "io.netty:netty-handler"
         implementation "io.netty:netty-transport"
 
         // used for jsr305 null handling annotations
         // https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305
-        implementation 'com.google.code.findbugs:jsr305:3.0.2'
+        compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
 
         // https://mvnrepository.com/artifact/org.slf4j/slf4j-api
         implementation 'org.slf4j:slf4j-api:2.0.18'
